@@ -1,4 +1,6 @@
 
+from logging import raiseExceptions
+
 import httpx
 import os
 import asyncio
@@ -7,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-print(GITHUB_TOKEN)
+
 URL="https://api.github.com/users"
 
 headers ={
@@ -17,30 +19,63 @@ headers ={
 client = httpx.AsyncClient(headers=headers)
 # get github user
 async def get_user(username:str):
-    response = await client.get(f"{URL}/{username}")
-    print("STATUS:", response.status_code)
-    print("CONTENT-TYPE:", response.headers.get("content-type"))
-    print("BODY:", response.text)
-    return response.json()
+    try:
+        response = await client.get(f"{URL}/{username}")
+
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        print("github controller error:", e.response.status_code)
+        return{
+            "success": False,
+            "message":"Internal server error"
+            
+        }
 
 # get github repos of the user
 
 async def get_repos(username:str):
-    response = await client.get(f"{URL}/{username}/repos")
-    return response.json()    
+    try:
+        response = await client.get(f"{URL}/{username}/repos")
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        print("github controller error:", e.response.status_code)
+        return{
+            "success": False,
+            "message":"Internal server error"
+            
+        }    
 
-
-
+async def get_repo_commits(username:str, repo: str):
+    try:
+        response = await client.get(f"https://api.github.com/repos/{username}/{repo}/commits")
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        print("github controller error:", e.response.status_code)
+        return{
+            "success": False,
+            "message":"Internal server error"
+            
+        }
 # get github profile of the user
 
 async def get_profile(username:str):
-    user, repos = await asyncio.gather(
-        get_user(username),
-        get_repos(username)
-    )
-    return{
-        "user":user,
-        "repos":repos
-    }
+    try:
+        user, repos = await asyncio.gather(
+            get_user(username),
+            get_repos(username)
+        )
+        return{
+            "user":user,
+            "repos":repos
+        }
+    except httpx.HTTPStatusError as e:
+        print("github controller error:", e.response.status_code)
+        return{
+            "success": False,
+            "message":"Internal server error"
+            
+        }
 
     
