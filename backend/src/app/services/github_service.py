@@ -25,7 +25,7 @@ async def get_user(username:str):
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        print("github controller error:", e.response.status_code)
+        print("github services error:", e.response.status_code)
         return{
             "success": False,
             "message":"Internal server error"
@@ -40,7 +40,7 @@ async def get_repos(username:str):
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        print("github controller error:", e.response.status_code)
+        print("github services error:", e.response.status_code)
         return{
             "success": False,
             "message":"Internal server error"
@@ -52,7 +52,7 @@ async def get_repo_commits(username:str, repo: str):
         response = await client.get(f"https://api.github.com/repos/{username}/{repo}/commits")
         return response.json()
     except httpx.HTTPStatusError as e:
-        print("github controller error:", e.response.status_code)
+        print("github services error:", e.response.status_code)
         return{
             "success": False,
             "message":"Internal server error"
@@ -71,11 +71,27 @@ async def get_profile(username:str):
             "repos":repos
         }
     except httpx.HTTPStatusError as e:
-        print("github controller error:", e.response.status_code)
+        print("github services error:", e.response.status_code)
         return{
             "success": False,
             "message":"Internal server error"
             
         }
 
+# repo languages
+async def get_repo_languages(username: str, repo: str):
+    try:
+        languages = await client.get(f"https://api.github.com/repos/{username}/{repo}/languages")
+        # print(languages.content)
+        print()
+        # print("Languages\n", languages)
+        languages.raise_for_status()
+        return languages.json()
+    except httpx.HTTPStatusError as e:
+        print("github services error:", e.response.status_code)
+        return{
+            "success": False,
+            "message":"Internal server error"
+        }
+        
     
