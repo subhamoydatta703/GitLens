@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.services.github_service import get_profile, get_repo_commits, get_repo_languages, get_repos
+from app.services.github_service import get_profile, get_repo_commits, get_repo_languages, get_repos, get_all_repo_lan
 
 router = APIRouter(
     prefix="/github",
@@ -23,6 +23,11 @@ async def get_github_repo_languages(username: str, repo: str):
 @router.get("/{username}/repos")
 async def get_github_repos(username:str):
     return await get_repos(username)
+
+@router.get("/{username}/repos/language-stats")
+async def get_github_all_repo_lan(username:str):
+    return await get_all_repo_lan(username)
+    
     
 
 
