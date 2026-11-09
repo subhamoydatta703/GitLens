@@ -6,7 +6,7 @@ from fastapi import HTTPException
 import httpx, base64
 from dotenv import load_dotenv
 from starlette import responses
-from app.schemas.github_schemas import ReadmeResponse, RepoData
+from app.schemas.github_schemas import ReadmeResponse, RepoData, TechFilesDetails, TechFilesPath
 
 load_dotenv()
 
@@ -180,44 +180,58 @@ async def get_readme(username: str):
         ) from e
         
 # get tech stack
+semaphore = asyncio.Semaphore(5)
+async def get_pkg_data(username: str, repo: str, path: str):
+    async with semaphore:
+        try:
+            response = await client.get(
+                f"{REPO_URL}/{username}/{repo}/contents/{path}"
+            )
+        except httpx.RequestError:
+            return None
 
-async def get_tech_stack(username: str, repo: str):
-    tech_files = []
+    if response.status_code != 200:
+        return None
 
-    responses = await asyncio.gather(
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/package.json"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/requirements.txt"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/pyproject.toml"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/pom.xml"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/Dockerfile"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/docker-compose.yml"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/docker-compose.yaml"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/compose.yml"),
-        client.get(f"{REPO_URL}/{username}/{repo}/contents/compose.yaml"),
-        return_exceptions=True,
-    )
-    
-    for response in responses:
-        if not isinstance(response, httpx.Response):
-            continue
-    
-        if response.status_code == 404:
-            continue
-    
-        # response.raise_for_status()
-        # tech_files.append(response.json())
-        file_data = response.json()
-        encoded_content = file_data.get("content")
-        if not encoded_content:
-            continue
-        content = base64.b64decode(encoded_content).decode("utf-8")
-        tech_files.append({
-            "file": file_data["name"],
-            "content": content
-        })
-        # print("file data: \n\n", file_data)
+    return response.json()
 
+
+
+    
+async def get_tech_stack(username: str)-> list[TechFilesDetails]:
+    tech_files: list[TechFilesDetails] = []
+    try:
+        repo_pkg_data = await get_project_tree(username)
+        
+        results = await asyncio.gather(
+            *(get_pkg_data(username, data.repo, data.path) for data in repo_pkg_data)
+        )
+        
+        for data, file_data in zip(repo_pkg_data, results):
+            
+            if file_data == None:
+                continue
+          
+
+    
+            encoded_content = file_data.get("content")
+            if not encoded_content:
+                continue
+            content = base64.b64decode(encoded_content).decode("utf-8")
+    
+            tech_files.append(TechFilesDetails(
+                repo=data.repo,
+                file_name=file_data["name"],
+                file_path=file_data["path"],
+                file_content=content
+            ))
+    except httpx.RequestError as error:
+        print("GitHub request failed:", error)
+        return []
+    
     return tech_files
+
+
 
 async def get_stack(username:str):
     repos, forked_repos = await asyncio.gather(
@@ -227,17 +241,17 @@ async def get_stack(username:str):
     repo_file_data=[]
     for repo in all_repos:
        response= await get_tech_stack(username, repo)
-       # print("ok ok ",response)
+
        repo_file_data.append(
            {
                "repo": repo,
                "data":response
            }
        )
-       # print(repo_file_data)
+
     return repo_file_data
 
-async def get_project_tree(username:str):
+async def get_project_tree(username:str)-> list[TechFilesPath]:
     repos, forked_repos = await asyncio.gather(
         get_repos(username), get_forked_repos(username)
     )
@@ -248,11 +262,12 @@ async def get_project_tree(username:str):
         "requirements.txt",
         "pyproject.toml",
         "pom.xml",
-        "Dockerfile",
+        "dockerfile",
         "docker-compose.yml",
     ]
+    ignored_folders = {"node_modules", ".next", ".git", "dist", "build"}
     
-    files = []
+    files:list[TechFilesPath] = []
     for repo in all_repos:
         repo_name = repo.repo
         repo_branch = repo.default_branch
@@ -268,10 +283,16 @@ async def get_project_tree(username:str):
         
         for item in tree:
             # print(item["path"])
+            path = item["path"]
+            part_path = item["path"].split("/")
+            file = item["path"].split("/")[-1].lower()
+
+            if any(folder in ignored_folders for folder in part_path):
+                continue
         
         # return file_tree
     #     for item in file_tree["tree"]:
-            if item["type"] == "blob" and item["path"].split("/")[-1].lower() in wanted_files:
-                files.append(item["path"])
+            if item["type"] == "blob" and file in wanted_files:
+                files.append(TechFilesPath(repo=repo_name, path=item["path"]))
     return files
 
