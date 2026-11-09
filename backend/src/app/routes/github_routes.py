@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.services.github_service import get_repo_commits, get_repo_languages, get_repos, get_readme
+from app.services.github_service import get_repo_commits, get_repo_languages, get_repos, get_readme, get_stack, get_project_tree
 
 router = APIRouter(
     prefix="/github",
@@ -31,6 +31,13 @@ async def get_github_all_repo_lan(username:str):
 @router.get("/{username}/readme")
 async def get_github_repo_readme(username:str):
     return await get_readme(username)
-    
+
+@router.get("/{username}/tech-stack")
+async def get_tech_stacks(username:str):
+    return await get_stack(username)
+
+@router.get("/{username}/get-tree")
+async def get_tree(username:str):
+    return await get_project_tree(username)
 
 
