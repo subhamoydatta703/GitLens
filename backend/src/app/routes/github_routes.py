@@ -1,3 +1,5 @@
+from app.services.ai_service import analyze, get_content
+from app.schemas.github_schemas import AnalysisContext
 from fastapi import APIRouter
 
 from app.services.github_service import get_all_lan, get_repo_commits, get_repo_languages, get_repos, get_readme, get_stack, get_project_tree, get_tech_stack, get_user, repo_full_detail
@@ -44,3 +46,16 @@ async def get_tree(username:str):
 @router.get("/{username}/repo/detail")
 async def repo_detail(username:str):
     return await repo_full_detail(username)
+
+@router.get("/{username}/analyze")
+async def github_analyze(username:str):
+    content = await get_content(username)
+    analysis = await analyze(content)
+    return {"analysis": analysis}
+
+
+@router.post("/{username}/analyze")
+async def github_analyze_with_context(username: str, user_context: AnalysisContext):
+    content = await get_content(username, user_context=user_context)
+    analysis = await analyze(content)
+    return {"analysis": analysis}
