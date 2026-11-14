@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel
 
 class ReadmeResponse(BaseModel):
@@ -45,3 +46,8 @@ class GitHubFullDetail(BaseModel):
     repo_detail: list[GitHubProfile]
     languages: list[RepoLanguage]
     readme: list[str]
+# 
+class AIInput(BaseModel):
+    user_detail: list[GitHubProfile]
+    readme: list[ReadmeResponse]
+    

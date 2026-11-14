@@ -1,15 +1,15 @@
 from fastapi import APIRouter
 
-from app.services.github_service import get_all_lan, get_repo_commits, get_repo_languages, get_repos, get_readme, get_stack, get_project_tree, get_tech_stack, repo_full_detail
+from app.services.github_service import get_all_lan, get_repo_commits, get_repo_languages, get_repos, get_readme, get_stack, get_project_tree, get_tech_stack, get_user, repo_full_detail
 
 router = APIRouter(
     prefix="/github",
     tags=["github"],
 )
-
+# this
 @router.get("/{username}")
 async def get_github_profile(username:str):
-    return  await get_profile(username)
+    return  await get_user(username)
 
 @router.get("/{username}/{repo}/commits")
 async def get_github_repo_commits(username:str, repo:str):
@@ -40,7 +40,7 @@ async def get_user_tech_stacks(username:str):
 async def get_tree(username:str):
     return await get_project_tree(username)
 
-
+# this
 @router.get("/{username}/repo/detail")
-async def repo_detail(username):
+async def repo_detail(username:str):
     return await repo_full_detail(username)
