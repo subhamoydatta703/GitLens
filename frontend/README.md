@@ -59,4 +59,4 @@ The production static output is `dist/`. `.openai/hosting.json` retains the priv
 
 The main workspace is rendered only after a successful profile lookup returns a matching, valid GitHub profile. Username syntax, profile URL shape, response identity, and profile fields are validated; failed requests and saved browser reports do not unlock the workspace. The public sample is a separate page without main navigation.
 
-The UI review added mobile repository cards, expandable technology lists, report section navigation, a pinned context-form action row, keyboard support for sample tabs, mobile navigation focus management, and explicit focus restoration. See `docs/UI-REVIEW.md` for captured evidence, notes, and verification limits.
+The UI review added mobile repository cards, expandable technology lists, report section navigation, a pinned context-form action row, keyboard support for sample tabs, mobile navigation focus management, and explicit focus restoration. See `docs/UI-REVIEW.md` for review notes and verification limits. Screenshots are kept locally and excluded from version control.

@@ -4,7 +4,7 @@ Reviewed on 14 November 2026 using the Product Design audit guidance and the exi
 
 ## Scope and evidence
 
-The reviewed journey is landing page → verified profile or public sample → repositories → AI report → mobile navigation → optional context. Captures use 1440 × 1000 desktop and 390 × 844 mobile viewports. Every screenshot below was captured and inspected during this review. The stable UI baseline was captured after the requested username gate was implemented; earlier captures showing a drawer mid-transition were rejected.
+The reviewed journey is landing page → verified profile or public sample → repositories → AI report → mobile navigation → optional context. Captures use 1440 × 1000 desktop and 390 × 844 mobile viewports. Screenshots were captured and inspected during this review and are kept locally, outside version control. The stable UI baseline was captured after the requested username gate was implemented; earlier captures showing a drawer mid-transition were rejected.
 
 Strengths retained: readable text contrast, a clear primary profile action, explicit sample labeling, useful report sections, and separate requests for profile data and AI generation.
 
@@ -23,21 +23,9 @@ Strengths retained: readable text contrast, a clear primary profile action, expl
 
 The form is higher on the page while the explanation remains readable. Username entry accepts a handle or a GitHub profile URL, including `github.com/username`. Repository URLs, unrelated hosts, embedded credentials, invalid handles, missing accounts, mismatched responses, and malformed profile records cannot open the main workspace. A valid-looking string alone does not unlock it.
 
-Before:
-
-![Landing form before spacing adjustments](ui-review/before-02-landing-mobile.png)
-
-After:
-
-![Landing form after spacing adjustments](ui-review/after-02-landing-mobile.png)
-
-[Desktop capture](ui-review/after-01-landing-desktop.png)
-
 ## 2. Public sample and verified workspace
 
 The sample has its own header and compact tabs. Visitors may explore fictional projects and reports, but there is no main navigation until a real profile lookup succeeds. Saved browser reports and URL parameters cannot bypass the gate. Changing users clears the previous profile's repositories, report, and user-specific context.
-
-![Standalone sample page](ui-review/after-03-overview-mobile.png)
 
 The gate is verified through controlled successful, missing, mismatched, malformed, and failed responses. It is not inferred from the screenshot alone.
 
@@ -45,37 +33,23 @@ The gate is verified through controlled successful, missing, mismatched, malform
 
 Before: the mobile viewport hid technology and evidence columns to the right.
 
-![Repository table before mobile card layout](ui-review/before-05-repositories-mobile.png)
-
 After: repository names, branches, technology tags, and file counts fit inside the viewport. Additional technologies open through a disclosure control that works with touch and keyboard.
-
-![Repository cards after the fix](ui-review/after-05-repositories-mobile.png)
 
 ## 4. Reading an AI report
 
 Before: long report content required manual scrolling to find recommendations.
 
-![Report before section navigation](ui-review/before-06-report-mobile.png)
-
 After: Jump to a section links to stable headings. Sample tabs support Arrow Left/Right, Home, and End. Section links remain usable below the sticky tab row.
-
-![Report after section navigation](ui-review/after-06-report-mobile.png)
 
 ## 5. Mobile navigation
 
 The drawer has an explicit close button. Tab and Shift+Tab remain within it, Escape closes it, and focus returns to the menu trigger. The underlying page is inert while the drawer is open. Opening it clears notifications that could cover navigation controls.
 
-![Mobile navigation after focus and overlay fixes](ui-review/after-08-navigation-mobile.png)
-
 ## 6. Optional context
 
 Before: the primary action was outside the initial mobile dialog viewport.
 
-![Context form before a pinned action row](ui-review/before-09-context-mobile.png)
-
 After: Cancel and Apply context remain visible while the fields scroll. Native dialog behavior and explicit focus restoration keep keyboard navigation predictable.
-
-![Context form with visible actions](ui-review/after-09-context-mobile.png)
 
 ## Verification and limits
 

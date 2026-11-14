@@ -6,3 +6,4 @@ dist/
 .sites-runtime/
 test-results/
 *.tsbuildinfo
+/docs/ui-review/
