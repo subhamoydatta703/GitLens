@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class ReadmeResponse(BaseModel):
     repo:str
@@ -46,8 +46,16 @@ class GitHubFullDetail(BaseModel):
     repo_detail: list[GitHubProfile]
     languages: list[RepoLanguage]
     readme: list[str]
-# 
+
+
+class AnalysisContext(BaseModel):
+
+    target_roles: list[str] = Field(default_factory=list, max_length=5)
+    goals: str | None = Field(default=None, max_length=2000)
+    additional_information: str | None = Field(default=None, max_length=12000)
+
+
 class AIInput(BaseModel):
     user_detail: list[GitHubProfile]
     readme: list[ReadmeResponse]
-    
+    user_context: AnalysisContext | None = None
