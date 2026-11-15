@@ -7,7 +7,9 @@ from groq import Groq
 
 from app.prompts.github_analysis import GITHUB_ANALYSIS_SYSTEM_INSTRUCTION
 from app.schemas.github_schemas import AIInput, AnalysisContext
-from app.services.github_service import get_readme, repo_full_detail
+from app.services.github.profile_service import repo_full_detail
+from app.services.github.readme_service import get_readme
+from app.services.github.repo_service import get_all_repos
 
 
 load_dotenv()
@@ -20,11 +22,12 @@ client = Groq(
 async def get_content(
     username: str, user_context: AnalysisContext | None = None
 ) -> AIInput:
+    repos = await get_all_repos(username)
     repo_detail, readme = await asyncio.gather(
-        repo_full_detail(username), get_readme(username)
+        repo_full_detail(username, repos=repos), get_readme(username, repos=repos)
     )
 
-    return AIInput(user_detail=repo_detail, readme=readme, user_context=user_context)
+    return AIInput(user_detail=repo_detail, readme=readme, user_context=user_context, repositories=repos)
 
 
 async def analyze(

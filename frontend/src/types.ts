@@ -15,6 +15,7 @@ export interface Profile {
 export interface Repository {
   repo: string;
   default_branch: string;
+  fork?: boolean;
 }
 
 export interface TechFile {
@@ -36,6 +37,8 @@ export interface Workspace {
   warnings: string[];
   repositoriesLoaded?: boolean;
   techLoaded?: boolean;
+  evidenceId?: string;
+  evidenceExpiresAt?: number;
 }
 
 export type View = 'landing' | 'overview' | 'repositories' | 'insights' | 'example' | 'saved';
