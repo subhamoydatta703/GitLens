@@ -918,3 +918,36 @@ body:has(dialog[open]){overflow:hidden}
 .report-cover,.table-scroll tbody tr{scroll-margin-top:85px}
 
 .repo-name .repo-fork{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border:1px solid #cbd5e1;border-radius:5px;background:#f1f5f9;color:#334155;font-size:12px;font-weight:600;line-height:1.5}
+/* Portfolio reports: topic navigation and evidence cards. */
+.structured-report{max-width:1200px;padding:0 30px 24px}
+.structured-report .report-cover{padding-bottom:26px}
+.structured-report .report-intro{margin-top:14px;font-size:15px;color:#526079;line-height:1.75;max-width:650px}
+.report-reader{display:grid;grid-template-columns:190px minmax(0,1fr);border-top:1px solid var(--line);gap:30px;padding-top:26px}
+.report-navigation{display:flex;flex-direction:column;gap:6px;align-self:start;position:sticky;top:24px}
+.report-navigation button{font:inherit;font-size:14px;font-weight:500;text-align:left;padding:12px 14px;background:transparent;border:1px solid transparent;border-radius:9px;color:#44546d;cursor:pointer;line-height:1.5}
+.report-navigation button:hover{background:#f3f6fc}
+.report-navigation button[aria-pressed="true"]{background:#edf3ff;border-color:#d8e4ff;color:#204bb0;font-weight:600}
+.report-navigation button:focus-visible,.report-group-filter select:focus-visible{outline:3px solid #5682d6;outline-offset:3px}
+.report-content{min-width:0}
+.report-content-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.report-kicker{font-size:11px;font-weight:600;letter-spacing:1.1px;color:#586b88}
+.report-content-heading h3{font-size:25px;line-height:1.4;letter-spacing:-.6px;margin:7px 0 0;color:#172d50}
+.report-group-filter{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:500;color:#526079}
+.report-group-filter select{font:inherit;font-size:13px;color:#243956;border:1px solid #d4ddec;border-radius:8px;padding:9px 12px;background:#fff;max-width:100%}
+.report-scope-note,.report-empty{font-size:14px;line-height:1.75;color:#526079;margin:0 0 24px}
+.report-topic-section{margin-bottom:28px}
+.report-group-label{font-size:12px;font-weight:600;color:#4c6386;text-transform:uppercase;letter-spacing:.7px;margin:0 0 12px}
+.report-card-grid{display:grid;gap:16px}
+.report-insight-card{min-width:0;border:1px solid #dee6f1;border-radius:13px;padding:23px 25px;background:#fff;overflow-wrap:anywhere}
+.report-insight-card h4{font-size:19px;font-weight:600;letter-spacing:-.3px;line-height:1.5;margin:0 0 18px;color:#203a61}
+.structured-report .report-insight-card .prose{max-width:none;font-size:15px;line-height:1.85;color:#43516a}
+.structured-report .report-insight-card .prose>:first-child{margin-top:0}
+.structured-report .report-insight-card .prose>:last-child{margin-bottom:0}
+.structured-report .report-insight-card .prose li{margin:12px 0}
+.structured-report .report-insight-card .prose strong{color:#263e60;font-weight:600}
+.structured-report .report-insight-card .prose code{white-space:normal;overflow-wrap:anywhere;font-size:.88em;background:#f0f4fa;color:#345680}
+.report-topic-actions .report-insight-card{border-left:3px solid #4775d4;background:linear-gradient(105deg,#f8faff,#fff 35%)}
+.report-topic-roles .report-insight-card{background:#f8faff}
+.structured-report .report-source-note{margin-top:18px;padding-top:20px;border-top:1px solid var(--line)}
+@media(max-width:1000px){.report-reader{grid-template-columns:1fr;gap:24px}.report-navigation{position:static;flex-direction:row;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:20px;gap:7px}.report-navigation button{padding:9px 12px;border-color:#e1e7f2}}
+@media(max-width:520px){.structured-report{padding:0 18px 20px}.report-reader{padding-top:18px;gap:20px}.report-navigation{flex-wrap:nowrap;overflow-x:auto;padding-bottom:14px}.report-navigation button{white-space:nowrap;flex-shrink:0;font-size:13px}.report-content-heading h3{font-size:23px}.report-insight-card{padding:20px 17px}.report-insight-card h4{font-size:18px}.structured-report .report-insight-card .prose{font-size:15px}.report-group-filter{width:100%}.report-group-filter select{width:100%}}
