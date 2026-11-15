@@ -21,18 +21,19 @@ npm run dev
 
 Vite forwards `/api/*` to `http://127.0.0.1:8000/*`, including POST context and long-running analysis requests. Set `BACKEND_URL` when starting Vite to change that proxy target. The backend's GitHub and Gemini credentials remain server-side.
 
-The website opens on a username-first landing page. **Explore my GitHub** fetches the profile, repository list, and technical files through your existing routes. Overview appears as soon as the profile is available, without generating AI content. In **AI insights**, optionally add context and explicitly generate the AI response. **Example** is an isolated offline section containing Jordan Ellis, a fictional developer, four realistic sample repositories, technical files, and a detailed illustrative report; it never queries GitHub or replaces real data.
+The website opens on a username-first landing page. **Explore my GitHub** fetches the profile, then prepares the repository, README, and technical-file evidence. The backend stores the collected evidence temporarily; analysis is enabled only after preparation succeeds. Overview appears as soon as the profile is available, without generating AI content. In **AI insights**, optionally add context and explicitly generate the AI response. **Example** is an isolated offline section containing Jordan Ellis, a fictional developer, four realistic sample repositories, technical files, and a detailed illustrative report; it never queries GitHub or replaces real data.
 
 ## API integration
 
-The frontend uses the existing endpoints:
+The frontend uses these endpoints:
 
-- `POST /github/{username}/analyze`: body contains `target_roles`, `goals`, `additional_information`; response is `{ "analysis": "Markdown..." }`.
-- `GET /github/{username}`: profile details.
-- `GET /github/{username}/repos`: non-forked repository names and branches.
-- `GET /github/{username}/tech-stack`: supported technical files.
+- `GET /github/{username}`: profile details, shown immediately after validation.
+- `POST /github/{username}/evidence`: prepares and temporarily stores `AIInput`; returns `evidence_id`, `expires_at` (Unix seconds), all repositories including forks, and technical files. It does not generate AI content.
+- `POST /github/{username}/analyze?evidence_id=...`: reads prepared evidence and attaches `target_roles`, `goals`, and `additional_information` from the request body. Returns `{ "analysis": "Markdown..." }` without fetching GitHub again.
 
-Profile loading and AI generation are independent. Repositories contains only rows from `/repos`; technical files cannot synthesize extra repository rows. Profile details appear before slower technical-file requests complete. Failed supplemental requests display an explicit unavailable state; failed AI generation preserves fetched GitHub data and never substitutes an example. Requests can be cancelled and time out after four minutes.
+The evidence store holds up to 20 profiles for ten minutes in one backend process. Restarting the backend clears it; it is not shared across multiple workers. Expired, missing, or mismatched evidence produces HTTP 409 and requires reloading the profile. Concurrent preparation requests for one username share the same collection. User context is copied into each analysis request and is not stored with shared evidence.
+
+Overview appears before preparation finishes. The Generate button remains disabled until evidence is ready, and disables again when it expires or the server reports it missing. Repositories and technical files come from the same prepared result, so the frontend does not separately refetch `/repos` and `/tech-stack`. Failed preparation keeps the profile visible; failed analysis preserves fetched data. Requests can be cancelled and the frontend stops waiting after four minutes. Cancelling a browser request does not guarantee cancellation of backend work shared by other callers.
 
 For production, set the public `VITE_API_BASE_URL` before building. A static hosted frontend does not host the Python backend or provide Vite's development proxy. Deploy FastAPI separately with HTTPS and set `FRONTEND_ORIGINS` on the backend to the exact frontend origin (comma-separated for multiple origins). For the private Sites preview, include `https://gitlens-portfolio-insights.airycob8.chatgpt.site`. Do not put API keys in frontend environment variables.
 

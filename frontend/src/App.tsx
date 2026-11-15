@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, Bookmark, Check,
   ChevronDown, ChevronRight, Code2, ExternalLink, FileCode2, FileText,
-  FolderGit2, GitBranch, Github, Info, Layers3, LoaderCircle, Menu, Target,
+  FolderGit2, GitBranch, GitFork, Github, Info, Layers3, LoaderCircle, Menu, Target,
   Plus, Search, ShieldCheck, Sparkles, Trash2, Users, X,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { exampleWorkspace } from './data/example';
-import { fetchWorkspace, generateAnalysis, defaultApiBase } from './lib/api';
+import { fetchWorkspace, generateAnalysis, defaultApiBase, EvidenceExpiredError } from './lib/api';
 import { normalizeUsername, readSavedReports, technologies, reportHeadings, reportHeadingEntries } from './lib/analysis';
 import type { AnalysisContext, View, Workspace } from './types';
 
@@ -90,10 +90,10 @@ function ContextForm({ context, onSave, onClose }: { context: AnalysisContext; o
 function RepositoryTable({ workspace, query, limit }: { workspace: Workspace; query: string; limit?: number }) {
   const repositories = workspace.repositories;
   const filtered = repositories.filter(({ repo }) => repo.toLowerCase().includes(query.toLowerCase())).slice(0, limit);
-  return filtered.length ? <div className="table-scroll"><table><thead><tr><th scope="col">Repository</th><th scope="col">Declared technologies</th><th scope="col">Evidence</th><th scope="col"><span className="sr-only">Open repository</span></th></tr></thead><tbody>{filtered.map(({ repo, default_branch }) => {
+  return filtered.length ? <div className="table-scroll"><table><thead><tr><th scope="col">Repository</th><th scope="col">Declared technologies</th><th scope="col">Evidence</th><th scope="col"><span className="sr-only">Open repository</span></th></tr></thead><tbody>{filtered.map(({ repo, default_branch, fork }) => {
     const files = workspace.tech.filter((file) => file.repo === repo);
     const stack = technologies(files);
-    return <tr key={repo}><td><div className="repo-name"><div className="repo-icon"><FolderGit2 size={18} /></div><div><span className="repo-title">{workspace.sample ? repo : <a href={`https://github.com/${workspace.username}/${encodeURIComponent(repo)}`} target="_blank" rel="noopener noreferrer">{repo}</a>}</span><span><GitBranch size={11} />{default_branch || 'Branch not supplied'}</span></div></div></td><td data-label="Technologies"><div className="tags">{stack.slice(0, 3).map((tech) => <span className="tag" key={tech}>{tech}</span>)}{stack.length > 3 && <details className="more-technologies"><summary aria-label={`Additional technologies for ${repo}`}><span className="more-count">+{stack.length - 3} more</span><span className="less-label">Show less</span></summary><div>{stack.slice(3).map((name) => <span className="tag" key={name}>{name}</span>)}</div></details>}{!stack.length && <span className="muted">No manifest evidence</span>}</div></td><td data-label="Project evidence"><span className="evidence-count"><span className={`status-dot ${files.length ? '' : 'gray'}`} />{files.length} {files.length === 1 ? 'file' : 'files'}</span></td><td className="repo-row-action">{!workspace.sample && <a className="icon-button" aria-label={`Open ${repo} on GitHub`} href={`https://github.com/${workspace.username}/${encodeURIComponent(repo)}`} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={17} /></a>}</td></tr>;
+    return <tr key={repo}><td><div className="repo-name"><div className="repo-icon"><FolderGit2 size={18} /></div><div><span className="repo-title">{workspace.sample ? repo : <a href={`https://github.com/${workspace.username}/${encodeURIComponent(repo)}`} target="_blank" rel="noopener noreferrer">{repo}</a>}</span>{fork === true && <span className="repo-fork"><GitFork size={12} />Fork</span>}<span><GitBranch size={11} />{default_branch || 'Branch not supplied'}</span></div></div></td><td data-label="Technologies"><div className="tags">{stack.slice(0, 3).map((tech) => <span className="tag" key={tech}>{tech}</span>)}{stack.length > 3 && <details className="more-technologies"><summary aria-label={`Additional technologies for ${repo}`}><span className="more-count">+{stack.length - 3} more</span><span className="less-label">Show less</span></summary><div>{stack.slice(3).map((name) => <span className="tag" key={name}>{name}</span>)}</div></details>}{!stack.length && <span className="muted">No manifest evidence</span>}</div></td><td data-label="Project evidence"><span className="evidence-count"><span className={`status-dot ${files.length ? '' : 'gray'}`} />{files.length} {files.length === 1 ? 'file' : 'files'}</span></td><td className="repo-row-action">{!workspace.sample && <a className="icon-button" aria-label={`Open ${repo} on GitHub`} href={`https://github.com/${workspace.username}/${encodeURIComponent(repo)}`} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={17} /></a>}</td></tr>;
   })}</tbody></table></div> : <div className="empty-state"><FolderGit2 size={30} /><h3>{query ? 'No matching repositories' : 'No repositories available'}</h3><p>{query ? 'Try a different repository name.' : 'This user has no repositories in the returned repository list.'}</p></div>;
 }
 
@@ -210,6 +210,14 @@ export default function App() {
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4000); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { if (!analyzing) return; const timer = setInterval(() => setElapsed((seconds) => seconds + 1), 1000); return () => clearInterval(timer); }, [analyzing]);
   useEffect(() => {
+    if (!workspace?.evidenceId || !workspace.evidenceExpiresAt) return;
+    const evidenceId = workspace.evidenceId;
+    const timer = setTimeout(() => {
+      setWorkspace((previous) => previous?.evidenceId === evidenceId ? { ...previous, evidenceId: undefined } : previous);
+    }, Math.max(0, workspace.evidenceExpiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [workspace?.evidenceId, workspace?.evidenceExpiresAt]);
+  useEffect(() => {
     const query = window.matchMedia('(max-width: 720px)');
     const change = () => { setIsMobile(query.matches); if (!query.matches) setMobileOpen(false); };
     query.addEventListener('change', change);
@@ -266,7 +274,7 @@ export default function App() {
         setWorkspace((previous) => ({ ...result, analysis: previous?.analysis || '', context: previous?.context || emptyContext }));
         if (!profileShown) { profileShown = true; setView('overview'); }
       });
-      if (!current.signal.aborted) { setUsername(user); setToast('GitHub profile and available evidence loaded.'); }
+      if (!current.signal.aborted) { setUsername(user); }
     } catch (err) {
       if (profileController.current !== current) return;
       if (current.signal.aborted) {
@@ -276,6 +284,10 @@ export default function App() {
   }
   async function runAnalysis() {
     if (!workspace) { focusInput(); return; }
+    if (!workspace.evidenceId || !workspace.evidenceExpiresAt || workspace.evidenceExpiresAt <= Date.now()) {
+      setError('Reload your profile to prepare the evidence before generating insights.');
+      return;
+    }
     analysisController.current?.abort();
     const current = new AbortController(); analysisController.current = current;
     const user = workspace.username;
@@ -283,14 +295,17 @@ export default function App() {
     const timeout = setTimeout(() => current.abort('timeout'), 240000);
     setError(''); setAnalyzing(true); setElapsed(0); navigate('insights');
     try {
-      const analysis = await generateAnalysis(apiBase, user, usedContext, current.signal);
+      const analysis = await generateAnalysis(apiBase, user, usedContext, current.signal, workspace.evidenceId);
       if (current.signal.aborted || analysisController.current !== current) return;
       setWorkspace((previous) => previous?.username === user ? { ...previous, analysis, context: usedContext, createdAt: new Date().toISOString() } : previous);
       setToast('Your AI response is ready.');
     } catch (err) {
       if (analysisController.current !== current) return;
       if (current.signal.aborted) setError(current.signal.reason === 'timeout' ? 'AI analysis took longer than four minutes. Your GitHub data is still available.' : 'AI generation was cancelled. Your GitHub data is still available.');
-      else setError(err instanceof Error ? err.message : 'AI analysis failed. Your GitHub data is still available.');
+      else {
+        if (err instanceof EvidenceExpiredError) setWorkspace((previous) => previous?.username === user ? { ...previous, evidenceId: undefined } : previous);
+        setError(err instanceof Error ? err.message : 'AI analysis failed. Your GitHub data is still available.');
+      }
     } finally { clearTimeout(timeout); if (analysisController.current === current) setAnalyzing(false); }
   }
   const activeReport = selectedReport || workspace;
@@ -366,9 +381,9 @@ export default function App() {
 
         {(view === 'overview' || view === 'repositories' || view === 'insights') && !displayedUser && !fetching && <EmptyWorkspace view={view} focusInput={focusInput} showExample={() => navigate('example')} />}
         {view === 'overview' && workspace && <Overview workspace={workspace} loading={fetching} onRepositories={(repo) => { navigate('repositories'); setQuery(repo || ''); }} onAnalyze={() => navigate('insights')} />}
-        {view === 'repositories' && workspace && <Panel title="Your GitHub repositories" subtitle="Explore this profile’s public repositories and available technical evidence." action={<label className="search-input"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a repository…" aria-label="Search repositories" /></label>}>{workspace.repositoriesLoaded === false ? <div className="empty-state"><FolderGit2 size={30} /><h3>{fetching ? 'Loading repositories…' : 'Repository list unavailable'}</h3><p>{fetching ? 'Loading this profile’s public repositories.' : 'Refresh the profile to try again.'}</p></div> : <RepositoryTable workspace={workspace} query={query} />}</Panel>}
+        {view === 'repositories' && workspace && <Panel title="Your GitHub repositories" subtitle="Explore all public repositories, including forks, and available technical evidence." action={<label className="search-input"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a repository…" aria-label="Search repositories" /></label>}>{workspace.repositoriesLoaded === false ? <div className="empty-state"><FolderGit2 size={30} /><h3>{fetching ? 'Loading repositories…' : 'Repository list unavailable'}</h3><p>{fetching ? 'Loading this profile’s public repositories.' : 'Refresh the profile to try again.'}</p></div> : <RepositoryTable workspace={workspace} query={query} />}</Panel>}
         {view === 'insights' && activeReport && <>
-          {!selectedReport && <section className="panel analysis-controls"><div><h2>{workspace?.analysis ? 'Update your AI insights' : 'Generate your AI insights'}</h2><p>Analyze @{workspace?.username} using your repository evidence and optional context.</p>{contextCount > 0 && <p className="context-summary"><Check size={14} />Context ready{context.target_roles.length ? ` · ${context.target_roles.join(', ')}` : ''}</p>}</div><div className="analysis-control-actions"><button className="button secondary" onClick={() => setModal('context')} disabled={analyzing}><Plus size={16} />Your context{contextCount > 0 && <span>({contextCount})</span>}</button><button className="button primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}{analyzing ? 'Generating…' : workspace?.analysis ? 'Regenerate AI insights' : 'Generate AI insights'}</button></div></section>}
+          {!selectedReport && <section className="panel analysis-controls"><div><h2>{workspace?.analysis ? 'Update your AI insights' : 'Generate your AI insights'}</h2><p>Analyze @{workspace?.username} using your repository evidence and optional context.</p>{!workspace?.evidenceId && <p className="context-summary" role="status">{fetching ? 'Collecting your portfolio evidence. Generation will be available when it is ready.' : 'Reload your profile to prepare the evidence for analysis.'}</p>}{contextCount > 0 && <p className="context-summary"><Check size={14} />Context ready{context.target_roles.length ? ` · ${context.target_roles.join(', ')}` : ''}</p>}</div><div className="analysis-control-actions"><button className="button secondary" onClick={() => setModal('context')} disabled={analyzing}><Plus size={16} />Your context{contextCount > 0 && <span>({contextCount})</span>}</button><button className="button primary" onClick={runAnalysis} disabled={analyzing || !workspace?.evidenceId}>{analyzing ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}{analyzing ? 'Generating…' : fetching ? 'Preparing evidence…' : workspace?.analysis ? 'Regenerate AI insights' : 'Generate AI insights'}</button></div></section>}
           {selectedReport && <div className="sample-banner"><Info size={16} /><p>This is a saved response for @{selectedReport.username}. You can return to your current portfolio at any time.</p><button className="text-button" onClick={() => setSelectedReport(null)}>Return to current portfolio</button></div>}
           {analyzing && !selectedReport && <section className="panel ai-loading" role="status"><LoaderCircle className="spin" size={26} /><div><h2>Generating your AI response</h2><p>Your overview and repositories remain available while the model works. {elapsed}s elapsed.</p></div><button className="button secondary" onClick={() => analysisController.current?.abort()}>Cancel generation</button></section>}
           {activeReport.analysis ? <FullReport workspace={activeReport} /> : !analyzing && <section className="panel welcome-panel"><span className="welcome-icon"><Sparkles size={36} /></span><h2>No AI response yet.</h2><p>Add your goals and experience, then generate a personalized review of your portfolio.</p></section>}

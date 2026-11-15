@@ -9,6 +9,7 @@ class ReadmeResponse(BaseModel):
 class RepoData(BaseModel):
     repo: str
     default_branch: str
+    fork: bool = False
 
 class TechFilesPath(BaseModel):
     repo: str
@@ -59,3 +60,4 @@ class AIInput(BaseModel):
     user_detail: list[GitHubProfile]
     readme: list[ReadmeResponse]
     user_context: AnalysisContext | None = None
+    repositories: list[RepoData] = Field(default_factory=list)

@@ -5,12 +5,14 @@ export function defaultApiBase() {
   return import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '/api';
 }
 
-async function request<T>(base: string, path: string, signal: AbortSignal, body?: AnalysisContext): Promise<T> {
+export class EvidenceExpiredError extends Error {}
+
+async function request<T>(base: string, path: string, signal: AbortSignal, body?: AnalysisContext, method: 'GET' | 'POST' = body ? 'POST' : 'GET'): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, {
       signal,
-      method: body ? 'POST' : 'GET',
+      method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -19,10 +21,11 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
     throw new Error('We couldn’t load this information right now. Please try again shortly.');
   }
   if (!response.ok) {
+    if (response.status === 409) throw new EvidenceExpiredError('Your analysis evidence is no longer available. Reload your profile before generating insights.');
     if (response.status === 404) throw new Error('GitHub profile not found. Please check the username and try again.');
     if (response.status === 429) throw new Error('The request limit was reached. Wait a moment before trying again.');
     if (response.status === 422) throw new Error('Please review the information you entered and try again.');
-    throw new Error(path.endsWith('/analyze') ? 'Insights are temporarily unavailable. Please try again shortly.' : 'We couldn’t load your GitHub information. Please try again shortly.');
+    throw new Error(path.split('?')[0].endsWith('/analyze') ? 'Insights are temporarily unavailable. Please try again shortly.' : 'We couldn’t load your GitHub information. Please try again shortly.');
   }
   try { return await response.json(); }
   catch { throw new Error('We couldn’t read this information. Please try again shortly.'); }
@@ -53,40 +56,37 @@ export async function fetchWorkspace(
   };
   if (signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
   onUpdate(workspace);
-  await Promise.all([
-    (async () => {
-      try {
-        const repos = await request<Repository[]>(base, `${path}/repos`, signal);
-        if (!Array.isArray(repos) || !repos.every((repo) => typeof repo?.repo === 'string' && typeof repo?.default_branch === 'string')) {
-          throw new Error('The repository list could not be loaded.');
-        }
-        workspace = { ...workspace, repositories: repos, repositoriesLoaded: true };
-      } catch (error) {
-        if (signal.aborted) throw error;
-        workspace = { ...workspace, warnings: [...workspace.warnings, 'Repository list could not be loaded.'] };
-      }
-      if (!signal.aborted) onUpdate(workspace);
-    })(),
-    (async () => {
-      try {
-        const files = await request<TechFile[]>(base, `${path}/tech-stack`, signal);
-        if (!Array.isArray(files) || !files.every((file) => file && typeof file.repo === 'string' && typeof file.file_content === 'string' && typeof file.file_name === 'string' && typeof file.file_path === 'string')) {
-          throw new Error('Project technology details could not be loaded.');
-        }
-        workspace = { ...workspace, tech: files, techLoaded: true };
-      } catch (error) {
-        if (signal.aborted) throw error;
-        workspace = { ...workspace, warnings: [...workspace.warnings, 'Technology files could not be loaded.'] };
-      }
-      if (!signal.aborted) onUpdate(workspace);
-    })(),
-  ]);
+  try {
+    const evidence = await request<{
+      evidence_id: string; expires_at: number; repositories: Repository[]; tech: TechFile[];
+    }>(base, `${path}/evidence`, signal, undefined, 'POST');
+    if (typeof evidence?.evidence_id !== 'string' || !evidence.evidence_id
+      || typeof evidence.expires_at !== 'number' || !Number.isFinite(evidence.expires_at)
+      || evidence.expires_at * 1000 <= Date.now()
+      || !Array.isArray(evidence.repositories)
+      || !evidence.repositories.every((repo) => typeof repo?.repo === 'string' && typeof repo?.default_branch === 'string' && typeof repo?.fork === 'boolean')
+      || !Array.isArray(evidence.tech)
+      || !evidence.tech.every((file) => file && typeof file.repo === 'string' && typeof file.file_content === 'string' && typeof file.file_name === 'string' && typeof file.file_path === 'string')) {
+      throw new Error('The portfolio evidence could not be read. Reload your profile to try again.');
+    }
+    workspace = {
+      ...workspace, repositories: evidence.repositories, tech: evidence.tech,
+      repositoriesLoaded: true, techLoaded: true,
+      evidenceId: evidence.evidence_id, evidenceExpiresAt: evidence.expires_at * 1000,
+    };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    workspace = { ...workspace, warnings: [...workspace.warnings,
+      error instanceof Error ? error.message : 'Portfolio evidence could not be prepared. Reload your profile to try again.'] };
+  }
+  if (!signal.aborted) onUpdate(workspace);
   if (signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
   return workspace;
 }
 
-export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal): Promise<string> {
-  const result = await request<{ analysis: string | null }>(base, `/github/${encodeURIComponent(username)}/analyze`, signal, context);
+export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal, evidenceId?: string): Promise<string> {
+  const query = evidenceId ? `?evidence_id=${encodeURIComponent(evidenceId)}` : '';
+  const result = await request<{ analysis: string | null }>(base, `/github/${encodeURIComponent(username)}/analyze${query}`, signal, context);
   if (typeof result?.analysis !== 'string' || !result.analysis.trim()) {
     throw new Error('The AI returned an empty analysis. Please try again.');
   }
