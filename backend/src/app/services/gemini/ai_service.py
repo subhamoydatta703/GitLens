@@ -1,8 +1,6 @@
 import asyncio
 
 import httpx
-from dotenv import load_dotenv
-from fastapi import HTTPException
 from google import genai
 from google.genai import types
 
