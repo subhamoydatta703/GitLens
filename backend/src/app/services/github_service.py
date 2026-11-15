@@ -1,13 +1,10 @@
 import asyncio
 import base64
 import os
-from logging import raiseExceptions
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException
-from pydantic import TypeAdapter
-from starlette import responses
 
 from app.schemas.github_schemas import (
     GitHubProfile,
@@ -73,9 +70,7 @@ async def get_repos(username: str) -> list[RepoData]:
             detail="Could not fetch GitHub repositories",
         ) from e
 
-    # get forked rwepos
-
-
+# Get forked repositories.
 async def get_forked_repos(username: str) -> list[RepoData]:
     try:
         response = await client.get(f"{URL}/{username}/repos?per_page=100")
@@ -140,50 +135,24 @@ async def get_repo_languages(username: str, repo: str):
         return {"success": False, "message": "Internal server error"}
 
 
-# # get all repo languages
+# Get all repository languages.
 async def get_all_repo_lan(username: str):
-    try:
-        all_repo_data = {}
-        all_repos = await get_repos(username)
-        for repo_name in all_repos:
-            print("repo_name: ", repo_name, "\n")
-            responses = await client.get(f"{REPO_URL}/{username}/{repo_name}/languages")
-
-            #             if not responses.json():
-            #                 continue
-            #
-            #             if responses.status_code != 200:
-            #                 continue
-            print("values: ", responses.json(), "\n")
-            name = list(responses.json().keys())
-            byte_count = list(responses.json().values())
-            print("name_lan: ", name, "\n")
-            print("byte: ", byte_count, "\n")
-        #     all_repo_data[repo_name]={
-        #         "languages": name,
-        #         "byte": byte_count,
-        #     }
-        # print(all_repo_data)
-        # return all_repo_data
-
-    except httpx.HTTPStatusError as e:
-        print("github services error:", e.response.status_code)
-        return {"success": False, "message": "Internal server error"}
+    return await get_all_lan(username)
 
 
-# get redme of a repo
-async def get_readme(username: str)->list[ReadmeResponse]:
+# Get repository READMEs.
+async def get_readme(username: str) -> list[ReadmeResponse]:
 
     try:
         repos, forked_repos = await asyncio.gather(
             get_repos(username), get_forked_repos(username)
         )
         all_repos = repos + forked_repos
-        readme_data:list[ReadmeResponse] =[]
-    
+        readme_data: list[ReadmeResponse] = []
+
         for repo in all_repos:
             repo_name = repo.repo
-     
+
             response = await client.get(
                 f"{REPO_URL}/{username}/{repo_name}/readme",
                 headers={"Accept": "application/vnd.github.raw+json"},
@@ -251,7 +220,7 @@ async def get_all_lan(username: str) -> list[list[RepoLanguage]]:
     results = await asyncio.gather(
         *(get_repo_lang_fn(username, repo.repo) for repo in repos)
     )
-    
+
 
     return results
 
@@ -266,7 +235,7 @@ async def get_tech_stack(username: str) -> list[TechFilesDetails]:
         )
 
         for data, file_data in zip(repo_pkg_data, results):
-            if file_data == None:
+            if file_data is None:
                 continue
 
             encoded_content = file_data.get("content")
@@ -290,13 +259,13 @@ async def get_tech_stack(username: str) -> list[TechFilesDetails]:
 
 
 async def get_stack(username: str):
-    repos, forked_repos = await asyncio.gather(
-        get_repos(username), get_forked_repos(username)
+    repos, forked_repos, tech_files = await asyncio.gather(
+        get_repos(username), get_forked_repos(username), get_tech_stack(username)
     )
     all_repos = repos + forked_repos
     repo_file_data = []
     for repo in all_repos:
-        response = await get_tech_stack(username, repo)
+        response = [file for file in tech_files if file.repo == repo.repo]
 
         repo_file_data.append({"repo": repo, "data": response})
 
@@ -308,7 +277,7 @@ async def get_project_tree(username: str) -> list[TechFilesPath]:
         get_repos(username), get_forked_repos(username)
     )
     all_repos = repos + forked_repos
- 
+
     wanted_files = [
         "package.json",
         "requirements.txt",
@@ -329,13 +298,13 @@ async def get_project_tree(username: str) -> list[TechFilesPath]:
         file_tree = response.json()
 
         if response.status_code != 200:
-      
-            continue  
+
+            continue
 
         tree = file_tree.get("tree", [])
 
         for item in tree:
-     
+
             path = item["path"]
             part_path = item["path"].split("/")
             file = item["path"].split("/")[-1].lower()
@@ -343,7 +312,7 @@ async def get_project_tree(username: str) -> list[TechFilesPath]:
             if any(folder in ignored_folders for folder in part_path):
                 continue
 
-      
+
             if item["type"] == "blob" and file in wanted_files:
                 files.append(TechFilesPath(repo=repo_name, path=item["path"]))
     return files
@@ -358,23 +327,14 @@ async def repo_full_detail(username: str) -> list[GitHubProfile]:
     repo_details: list[GitHubProfile] = []
 
     repo_details.append(
-         GitHubProfile(
-              name=user.name,
-              username=user.login,
-              followers=user.followers,
-              following=user.following,
-              bio=user.bio,
-              tech=tech_stack
-          )
+        GitHubProfile(
+            name=user.name,
+            username=user.login,
+            followers=user.followers,
+            following=user.following,
+            bio=user.bio,
+            tech=tech_stack,
+        )
     )
 
     return repo_details
-
-
-
-
-
-    
-    
-
-    
