@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { PortfolioReport } from './components/PortfolioReport';
 import { exampleWorkspace } from './data/example';
-import { fetchWorkspace, generateAnalysis, defaultApiBase, EvidenceExpiredError } from './lib/api';
+import { fetchWorkspace, generateAnalysis, defaultApiBase, EvidenceExpiredError, type AnalysisProgress } from './lib/api';
 import { normalizeUsername, readSavedReports, technologies } from './lib/analysis';
 import type { AnalysisContext, View, Workspace } from './types';
 
@@ -186,6 +186,7 @@ export default function App() {
   const apiBase = defaultApiBase();
   const [fetching, setFetching] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress>('submitting');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -279,15 +280,17 @@ export default function App() {
     const user = workspace.username;
     const usedContext = { ...context, target_roles: [...context.target_roles] };
     const timeout = setTimeout(() => current.abort('timeout'), 600000);
-    setError(''); setAnalyzing(true); setElapsed(0); navigate('insights');
+    setError(''); setAnalysisProgress('submitting'); setAnalyzing(true); setElapsed(0); navigate('insights');
     try {
-      const analysis = await generateAnalysis(apiBase, user, usedContext, current.signal, workspace.evidenceId);
+      const analysis = await generateAnalysis(apiBase, user, usedContext, current.signal, workspace.evidenceId, (progress) => {
+        if (!current.signal.aborted && analysisController.current === current) setAnalysisProgress(progress);
+      });
       if (current.signal.aborted || analysisController.current !== current) return;
       setWorkspace((previous) => previous?.username === user ? { ...previous, analysis, context: usedContext, createdAt: new Date().toISOString() } : previous);
       setToast('Your AI response is ready.');
     } catch (err) {
       if (analysisController.current !== current) return;
-      if (current.signal.aborted) setError(current.signal.reason === 'timeout' ? 'AI analysis took longer than ten minutes. Your GitHub data is still available.' : 'AI generation was cancelled. Your GitHub data is still available.');
+      if (current.signal.aborted) setError(current.signal.reason === 'timeout' ? 'Stopped waiting after ten minutes. Your analysis job may still be running. Your GitHub data is still available.' : 'Stopped waiting for this report. Your analysis job may still be running. Your GitHub data is still available.');
       else {
         if (err instanceof EvidenceExpiredError) setWorkspace((previous) => previous?.username === user ? { ...previous, evidenceId: undefined } : previous);
         setError(err instanceof Error ? err.message : 'AI analysis failed. Your GitHub data is still available.');
@@ -371,7 +374,7 @@ export default function App() {
         {view === 'insights' && activeReport && <>
           {!selectedReport && <section className="panel analysis-controls"><div><h2>{workspace?.analysis ? 'Update your AI insights' : 'Generate your AI insights'}</h2><p>Analyze @{workspace?.username} using your repository evidence and optional context.</p>{!workspace?.evidenceId && <p className="context-summary" role="status">{fetching ? 'Collecting your portfolio evidence. Generation will be available when it is ready.' : 'Reload your profile to prepare the evidence for analysis.'}</p>}{contextCount > 0 && <p className="context-summary"><Check size={14} />Context ready{context.target_roles.length ? ` · ${context.target_roles.join(', ')}` : ''}</p>}</div><div className="analysis-control-actions"><button className="button secondary" onClick={() => setModal('context')} disabled={analyzing}><Plus size={16} />Your context{contextCount > 0 && <span>({contextCount})</span>}</button><button className="button primary" onClick={runAnalysis} disabled={analyzing || !workspace?.evidenceId}>{analyzing ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}{analyzing ? 'Generating…' : fetching ? 'Preparing evidence…' : workspace?.analysis ? 'Regenerate AI insights' : 'Generate AI insights'}</button></div></section>}
           {selectedReport && <div className="sample-banner"><Info size={16} /><p>This is a saved response for @{selectedReport.username}. You can return to your current portfolio at any time.</p><button className="text-button" onClick={() => setSelectedReport(null)}>Return to current portfolio</button></div>}
-          {analyzing && !selectedReport && <section className="panel ai-loading" role="status"><LoaderCircle className="spin" size={26} /><div><h2>Generating your AI response</h2><p>Your repository evidence is reviewed in batches, then combined into one portfolio assessment. Your overview and repositories remain available. {elapsed}s elapsed.</p></div><button className="button secondary" onClick={() => analysisController.current?.abort()}>Cancel generation</button></section>}
+          {analyzing && !selectedReport && <section className="panel ai-loading" role="status"><LoaderCircle className="spin" size={26} /><div><h2>{analysisProgress === 'submitting' ? 'Starting your portfolio review' : analysisProgress === 'queued' ? 'Your review is queued' : 'Generating your AI insights'}</h2><p>{analysisProgress === 'submitting' ? 'Submitting your prepared portfolio evidence.' : analysisProgress === 'queued' ? 'Your report will begin when processing is available.' : 'Your repository evidence is being analyzed and combined into one portfolio assessment.'} Your overview and repositories remain available. {elapsed}s elapsed.</p></div><button className="button secondary" onClick={() => analysisController.current?.abort()}>Stop waiting</button></section>}
           {activeReport.analysis ? <PortfolioReport key={`${activeReport.username}-${activeReport.createdAt}`} workspace={activeReport} /> : !analyzing && <section className="panel welcome-panel"><span className="welcome-icon"><Sparkles size={36} /></span><h2>No AI response yet.</h2><p>Add your goals and experience, then generate a personalized review of your portfolio.</p></section>}
         </>}
         {view === 'saved' && <Panel title="Your saved AI responses" subtitle={`${saved.length} of 10 browser-local report slots used`}>{saved.length ? <div className="saved-list">{saved.map((report) => <div className="saved-row" key={`${report.username}-${report.createdAt}`}><div className="repo-icon"><FileText size={21} /></div><button className="saved-open" onClick={() => openSaved(report)}><strong>{report.profile?.name || report.username}</strong><span>@{report.username} · {new Date(report.createdAt).toLocaleDateString()}</span></button><button className="icon-button" aria-label={`Delete saved report for ${report.username}`} onClick={() => { const next = saved.filter((item) => item !== report); try { localStorage.setItem('gitlens.reports', JSON.stringify(next)); setSaved(next); setToast('Saved report removed.'); } catch { setToast('Could not update browser storage.'); } }}><Trash2 size={17} /></button><button className="icon-button" aria-label={`Open report for ${report.username}`} onClick={() => openSaved(report)}><ArrowRight size={17} /></button></div>)}</div> : <div className="empty-state"><Bookmark size={34} /><h3>No saved AI responses yet.</h3><p>Generate a real analysis and choose Save report to keep it in this browser.</p><button className="button primary" onClick={() => navigate('insights')}>Go to AI insights <ArrowRight size={16} /></button></div>}</Panel>}
