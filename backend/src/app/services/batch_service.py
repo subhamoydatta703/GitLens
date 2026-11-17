@@ -14,7 +14,7 @@ def create_batches(content: AIInput):
         for file in profile.tech:
             tech_by_repo[file.repo].append(file.model_dump())
 
-    batches = [[], [], []]
+    batches = [[], []]
     i = 0
 
     for readme in readmes:
@@ -25,7 +25,7 @@ def create_batches(content: AIInput):
         }
 
         batches[i].append(data)
-        i = (i + 1) % 3
+        i = (i + 1) % 2
 
     # Include remaining projects that have files but no README.
     for repo, files in tech_by_repo.items():
@@ -36,7 +36,7 @@ def create_batches(content: AIInput):
         }
 
         batches[i].append(data)
-        i = (i + 1) % 3
+        i = (i + 1) % 2
 
     result = []
 

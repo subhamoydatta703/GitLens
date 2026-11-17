@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 
 
 from app.schemas.github_schemas import AnalysisContext
-from app.services.gemini.ai_service import analyze
+from app.services.analysis import analyze
 from app.services.github.evidence_service import get_saved_content
 
 router = APIRouter()
@@ -11,17 +11,21 @@ router = APIRouter()
 
 @router.get("/analysis/jobs/{job_id}")
 async def get_analysis_job(job_id: str):
-    job = await queue.getJob(job_id)
+    status = await queue.getJobState(job_id)
 
-    if job is None:
+    if status == "unknown":
         raise HTTPException(
             status_code=404,
             detail="Analysis job not found.",
         )
 
-    status = await job.getState()
-
     if status == "completed":
+        job = await queue.getJob(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Analysis job not found.",
+            )
         return {
             "status": status,
             "result": job.returnvalue,
