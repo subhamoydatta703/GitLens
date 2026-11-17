@@ -5,15 +5,44 @@ from fastapi import HTTPException
 from google.genai import errors, types
 
 from app.prompts.github_analysis import GITHUB_ANALYSIS_SYSTEM_INSTRUCTION
+from app.prompts.github_assessment import GITHUB_ASSESSMENT_SYSTEM_INSTRUCTION
 from app.schemas.github_schemas import AIInput, AnalysisContext, RepoData
-from app.services.gemini.assessment_service import assessment
-from app.services.gemini.batch_service import create_batches
-from app.services.gemini.client import client
+from app.services.batch_service import create_batches
 from app.services.github.profile_service import repo_full_detail
 from app.services.github.readme_service import get_readme
 from app.services.github.repo_service import get_all_repos
 
 BATCH_DELAY_SECONDS = 60
+MODEL = "gemini-3.5-flash-lite"
+
+
+async def generate_content(payload: str, system_instruction: str) -> str:
+    from app.services.gemini.client import client
+
+    try:
+        response = await client.aio.models.generate_content(
+            model=MODEL,
+            contents=payload,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=8192,
+                temperature=0.3,
+            ),
+        )
+    except errors.APIError as error:
+        raise HTTPException(
+            status_code=error.code if error.code in {429, 503, 504} else 502,
+            detail="Gemini could not complete the request.",
+        ) from error
+
+    if response.candidates and response.candidates[0].finish_reason == types.FinishReason.MAX_TOKENS:
+        raise HTTPException(status_code=502, detail="Gemini reached its output limit before completing.")
+
+    text = response.text
+    if not text or not text.strip():
+        raise HTTPException(status_code=502, detail="No content was returned by Gemini.")
+
+    return text
 
 
 async def get_content(
@@ -46,36 +75,13 @@ async def analyze(
 
         payload = json.dumps(batch, ensure_ascii=False)
 
-        try:
-            response = await client.aio.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=payload,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    max_output_tokens=8192,
-                    temperature=0.3,
-                ),
-            )
-
-        except errors.APIError as error:
-            print(error)
-            raise HTTPException(
-                status_code=error.code if error.code in {429, 503, 504} else 502,
-                detail="The analysis provider could not complete the request.",
-            ) from error
-
-        text = response.text
-        if not text or not text.strip():
-            raise HTTPException(
-                status_code=502,
-                detail=f"No analysis was returned for repository group {i + 1}.",
-            )
-        if response.candidates and response.candidates[0].finish_reason == types.FinishReason.MAX_TOKENS:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Repository group {i + 1} reached its output limit before completing.",
-            )
+        text = await generate_content(payload, system_instruction)
 
         results.append(text)
 
-    return await assessment(results, user_context=content.user_context)
+    payload = json.dumps({
+        "findings": results,
+        "user_context": content.user_context.model_dump() if content.user_context else None,
+    }, ensure_ascii=False)
+
+    return await generate_content(payload, GITHUB_ASSESSMENT_SYSTEM_INSTRUCTION)

@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 
 from app.schemas.github_schemas import AIInput
-from app.services.gemini.ai_service import analyze
+from app.services.analysis import analyze
 
 
 async def process(job, token):

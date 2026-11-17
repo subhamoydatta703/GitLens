@@ -15,6 +15,7 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
     response = await fetch(`${base}${path}`, {
       signal,
       method,
+      cache: path.startsWith('/github/analysis/jobs/') ? 'no-store' : 'default',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -101,9 +102,16 @@ export async function generateAnalysis(base: string, username: string, context: 
   onProgress?.('queued');
 
   while (!signal.aborted) {
-    const result = await request<{
-      status: string; result?: { analysis?: string }; message?: string;
-    }>(base, `/github/analysis/jobs/${encodeURIComponent(job.job_id)}`, signal);
+    const pollSignal = AbortSignal.any([signal, AbortSignal.timeout(15000)]);
+    let result: { status: string; result?: { analysis?: string }; message?: string };
+    try {
+      result = await request<typeof result>(base, `/github/analysis/jobs/${encodeURIComponent(job.job_id)}`, pollSignal);
+    } catch (error) {
+      if (!signal.aborted && pollSignal.aborted) {
+        throw new Error('We couldn’t confirm your analysis status. Your job may still be running. Please try again shortly.');
+      }
+      throw error;
+    }
 
     if (result?.status === 'completed') {
       if (typeof result.result?.analysis !== 'string' || !result.result.analysis.trim()) {

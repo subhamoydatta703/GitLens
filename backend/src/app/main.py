@@ -4,15 +4,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.jobs.queue import queue
+from app.jobs.worker import create_worker
 from app.routes.github import router as github_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    worker = create_worker()
     try:
         yield
     finally:
-        await queue.close()
+        try:
+            await worker.close()
+        finally:
+            await queue.close()
 
 
 app = FastAPI(lifespan=lifespan)
