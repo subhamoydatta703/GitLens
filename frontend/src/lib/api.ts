@@ -7,6 +7,8 @@ export function defaultApiBase() {
 
 export class EvidenceExpiredError extends Error {}
 
+export type AnalysisProgress = 'submitting' | 'queued' | 'processing';
+
 async function request<T>(base: string, path: string, signal: AbortSignal, body?: AnalysisContext, method: 'GET' | 'POST' = body ? 'POST' : 'GET'): Promise<T> {
   let response: Response;
   try {
@@ -21,6 +23,11 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
     throw new Error('We couldn’t load this information right now. Please try again shortly.');
   }
   if (!response.ok) {
+    if (path.startsWith('/github/analysis/jobs/')) {
+      throw new Error(response.status === 404
+        ? 'This analysis job is no longer available. Please generate a new report.'
+        : 'We couldn’t check your analysis. Please try again shortly.');
+    }
     if (response.status === 409) throw new EvidenceExpiredError('Your analysis evidence is no longer available. Reload your profile before generating insights.');
     if (response.status === 404) throw new Error('GitHub profile not found. Please check the username and try again.');
     if (response.status === 429) throw new Error('The request limit was reached. Wait a moment before trying again.');
@@ -84,11 +91,50 @@ export async function fetchWorkspace(
   return workspace;
 }
 
-export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal, evidenceId?: string): Promise<string> {
+export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal, evidenceId?: string, onProgress?: (progress: AnalysisProgress) => void): Promise<string> {
+  onProgress?.('submitting');
   const query = evidenceId ? `?evidence_id=${encodeURIComponent(evidenceId)}` : '';
-  const result = await request<{ analysis: string | null }>(base, `/github/${encodeURIComponent(username)}/analyze${query}`, signal, context);
-  if (typeof result?.analysis !== 'string' || !result.analysis.trim()) {
-    throw new Error('The AI returned an empty analysis. Please try again.');
+  const job = await request<{ job_id: string }>(base, `/github/${encodeURIComponent(username)}/analyze${query}`, signal, context);
+  if (typeof job?.job_id !== 'string' || !job.job_id.trim()) {
+    throw new Error('Your analysis could not be started. Please try again.');
   }
-  return result.analysis;
+  onProgress?.('queued');
+
+  while (!signal.aborted) {
+    const result = await request<{
+      status: string; result?: { analysis?: string }; message?: string;
+    }>(base, `/github/analysis/jobs/${encodeURIComponent(job.job_id)}`, signal);
+
+    if (result?.status === 'completed') {
+      if (typeof result.result?.analysis !== 'string' || !result.result.analysis.trim()) {
+        throw new Error('The AI returned an empty analysis. Please try again.');
+      }
+      return result.result.analysis;
+    }
+    if (result?.status === 'failed') {
+      throw new Error('The analysis could not be completed. Please try again shortly.');
+    }
+    if (!['waiting', 'active', 'delayed', 'prioritized', 'waiting-children', 'paused'].includes(result?.status)) {
+      throw new Error('We couldn’t read the analysis status. Please try again.');
+    }
+    onProgress?.(result.status === 'active' ? 'processing' : 'queued');
+    await waitForNextPoll(signal);
+  }
+  throw new DOMException('Request cancelled', 'AbortError');
+}
+
+function waitForNextPoll(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException('Request cancelled', 'AbortError')); return; }
+    const cancel = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      reject(new DOMException('Request cancelled', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve();
+    }, 2000);
+    signal.addEventListener('abort', cancel, { once: true });
+  });
 }
