@@ -1,9 +1,13 @@
 from functools import lru_cache
 from typing import Annotated
+import os
 
+from dotenv import load_dotenv
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+load_dotenv()
+CLERK_SECRET_KEY = os.environ["CLERK_SECRET_KEY"]
 
 class Settings(BaseSettings):
     clerk_secret_key: str
@@ -18,9 +22,9 @@ class Settings(BaseSettings):
             return [p.strip() for p in v.split(",") if p.strip()]
         return v
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(case_sensitive=False)
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(clerk_secret_key=CLERK_SECRET_KEY)
