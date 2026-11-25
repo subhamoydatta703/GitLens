@@ -89,9 +89,9 @@ export function normalizeUsername(input: string) {
   return value;
 }
 
-export function readSavedReports(): Workspace[] {
+export function readSavedReports(storageKey = 'gitlens.reports'): Workspace[] {
   try {
-    const data: unknown = JSON.parse(localStorage.getItem('gitlens.reports') || '[]');
+    const data: unknown = JSON.parse(localStorage.getItem(storageKey) || '[]');
     if (!Array.isArray(data)) return [];
     return data.filter((item): item is Workspace => Boolean(item && !item.sample && typeof item.username === 'string'
       && typeof item.analysis === 'string' && typeof item.createdAt === 'string'

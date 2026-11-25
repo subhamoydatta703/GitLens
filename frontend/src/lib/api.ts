@@ -8,15 +8,23 @@ export function defaultApiBase() {
 export class EvidenceExpiredError extends Error {}
 
 export type AnalysisProgress = 'submitting' | 'queued' | 'processing';
+type GetToken = () => Promise<string | null>;
 
-async function request<T>(base: string, path: string, signal: AbortSignal, body?: AnalysisContext, method: 'GET' | 'POST' = body ? 'POST' : 'GET'): Promise<T> {
+async function request<T>(base: string, path: string, signal: AbortSignal, body?: AnalysisContext, method: 'GET' | 'POST' = body ? 'POST' : 'GET', getToken?: GetToken): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  if (getToken) {
+    const token = await getToken();
+    if (!token) throw new Error('Sign in again to continue.');
+    headers.Authorization = `Bearer ${token}`;
+  }
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, {
       signal,
       method,
-      cache: path.startsWith('/github/analysis/jobs/') ? 'no-store' : 'default',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      cache: path === '/me' || path.startsWith('/github/analysis/jobs/') ? 'no-store' : 'default',
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (error) {
@@ -24,13 +32,17 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
     throw new Error('We couldn’t load this information right now. Please try again shortly.');
   }
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Sign in again to continue.');
+    if (response.status === 403) {
+      throw new Error('Sign in with your connected GitHub account to load your profile.');
+    }
     if (path.startsWith('/github/analysis/jobs/')) {
       throw new Error(response.status === 404
         ? 'This analysis job is no longer available. Please generate a new report.'
         : 'We couldn’t check your analysis. Please try again shortly.');
     }
     if (response.status === 409) throw new EvidenceExpiredError('Your analysis evidence is no longer available. Reload your profile before generating insights.');
-    if (response.status === 404) throw new Error('GitHub profile not found. Please check the username and try again.');
+    if (response.status === 404) throw new Error('GitHub profile not found.');
     if (response.status === 429) throw new Error('The request limit was reached. Wait a moment before trying again.');
     if (response.status === 422) throw new Error('Please review the information you entered and try again.');
     throw new Error(path.split('?')[0].endsWith('/analyze') ? 'Insights are temporarily unavailable. Please try again shortly.' : 'We couldn’t load your GitHub information. Please try again shortly.');
@@ -39,11 +51,22 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
   catch { throw new Error('We couldn’t read this information. Please try again shortly.'); }
 }
 
+export async function fetchGitHubIdentity(base: string, signal: AbortSignal, getToken: GetToken) {
+  const identity = await request<{ github_username: string; refresh_session: boolean }>(
+    base, '/me', signal, undefined, 'GET', getToken,
+  );
+  if (typeof identity?.github_username !== 'string' || !identity.github_username) {
+    throw new Error('Sign in with your GitHub account to load your profile.');
+  }
+  return identity;
+}
+
 export async function fetchWorkspace(
   base: string,
   username: string,
   signal: AbortSignal,
   onUpdate: (workspace: Workspace) => void = () => {},
+  getToken?: GetToken,
 ): Promise<Workspace> {
   const requestedUsername = normalizeUsername(username);
   const path = `/github/${encodeURIComponent(requestedUsername)}`;
@@ -67,7 +90,7 @@ export async function fetchWorkspace(
   try {
     const evidence = await request<{
       evidence_id: string; expires_at: number; repositories: Repository[]; tech: TechFile[];
-    }>(base, `${path}/evidence`, signal, undefined, 'POST');
+    }>(base, `${path}/evidence`, signal, undefined, 'POST', getToken);
     if (typeof evidence?.evidence_id !== 'string' || !evidence.evidence_id
       || typeof evidence.expires_at !== 'number' || !Number.isFinite(evidence.expires_at)
       || evidence.expires_at * 1000 <= Date.now()
@@ -92,10 +115,10 @@ export async function fetchWorkspace(
   return workspace;
 }
 
-export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal, evidenceId?: string, onProgress?: (progress: AnalysisProgress) => void): Promise<string> {
+export async function generateAnalysis(base: string, username: string, context: AnalysisContext, signal: AbortSignal, evidenceId?: string, onProgress?: (progress: AnalysisProgress) => void, getToken?: GetToken): Promise<string> {
   onProgress?.('submitting');
   const query = evidenceId ? `?evidence_id=${encodeURIComponent(evidenceId)}` : '';
-  const job = await request<{ job_id: string }>(base, `/github/${encodeURIComponent(username)}/analyze${query}`, signal, context);
+  const job = await request<{ job_id: string }>(base, `/github/${encodeURIComponent(username)}/analyze${query}`, signal, context, 'POST', getToken);
   if (typeof job?.job_id !== 'string' || !job.job_id.trim()) {
     throw new Error('Your analysis could not be started. Please try again.');
   }
@@ -105,7 +128,7 @@ export async function generateAnalysis(base: string, username: string, context: 
     const pollSignal = AbortSignal.any([signal, AbortSignal.timeout(15000)]);
     let result: { status: string; result?: { analysis?: string }; message?: string };
     try {
-      result = await request<typeof result>(base, `/github/analysis/jobs/${encodeURIComponent(job.job_id)}`, pollSignal);
+      result = await request<typeof result>(base, `/github/analysis/jobs/${encodeURIComponent(job.job_id)}`, pollSignal, undefined, 'GET', getToken);
     } catch (error) {
       if (!signal.aborted && pollSignal.aborted) {
         throw new Error('We couldn’t confirm your analysis status. Your job may still be running. Please try again shortly.');

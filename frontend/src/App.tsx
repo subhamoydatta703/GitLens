@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react';
+import { Show, SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, Bookmark, Check,
   ChevronDown, ChevronRight, Code2, ExternalLink, FileCode2, FileText,
@@ -7,8 +8,8 @@ import {
 } from 'lucide-react';
 import { PortfolioReport } from './components/PortfolioReport';
 import { exampleWorkspace } from './data/example';
-import { fetchWorkspace, generateAnalysis, defaultApiBase, EvidenceExpiredError, type AnalysisProgress } from './lib/api';
-import { normalizeUsername, readSavedReports, technologies } from './lib/analysis';
+import { fetchGitHubIdentity, fetchWorkspace, generateAnalysis, defaultApiBase, EvidenceExpiredError, type AnalysisProgress } from './lib/api';
+import { readSavedReports, technologies } from './lib/analysis';
 import type { AnalysisContext, View, Workspace } from './types';
 
 const emptyContext: AnalysisContext = { target_roles: [], goals: null, additional_information: null };
@@ -101,19 +102,35 @@ function Footprint({ workspace, onSelect }: { workspace: Workspace; onSelect: (r
   </Panel>;
 }
 
-function Landing({ username, setUsername, inputRef, onSubmit, fetching, error, showExample, cancel }: {
-  username: string; setUsername: (value: string) => void; inputRef: RefObject<HTMLInputElement | null>;
-  onSubmit: (event: FormEvent) => void; fetching: boolean; error: string;
+function Landing({ onLoadProfile, fetching, error, showExample, cancel }: {
+  onLoadProfile: () => void; fetching: boolean; error: string;
   showExample: () => void; cancel: () => void;
 }) {
   return <div className="landing-page">
     <a href="#landing-main" className="skip-link">Skip to content</a>
-    <header className="landing-nav"><a href="#" className="brand" aria-label="GitLens home"><span className="brand-icon"><Code2 size={26} strokeWidth={2.5} /></span><span>gitlens<span className="brand-period">.</span></span></a><nav aria-label="Landing navigation"><a href="#how-it-works">How it works</a><button className="button secondary" onClick={showExample}>View example <ArrowUpRight size={16} /></button></nav></header>
+    <header className="landing-nav"><a href="#" className="brand" aria-label="GitLens home"><span className="brand-icon"><Code2 size={26} strokeWidth={2.5} /></span><span>gitlens<span className="brand-period">.</span></span></a><nav aria-label="Landing navigation"><a href="#how-it-works">How it works</a><button className="button secondary" onClick={showExample}>View example <ArrowUpRight size={16} /></button><Show when="signed-in"><UserButton /></Show></nav></header>
     <main id="landing-main" className="landing-main">
       <section className="landing-hero"><div className="landing-copy"><span className="landing-kicker"><span className="status-dot" />UNDERSTAND YOUR WORK. PLAN YOUR NEXT STEP.</span><h1>Your GitHub tells a story.<br /><span>See the bigger picture.</span></h1><p>Explore your projects, understand your technical strengths, and identify practical steps toward your career goals.</p>
-        <form className="landing-form" onSubmit={onSubmit}><label htmlFor="landing-username">Start with your GitHub username</label><div className="landing-input-row"><Github size={22} /><input id="landing-username" ref={inputRef} aria-invalid={Boolean(error)} aria-describedby={error ? "username-error" : "username-hint"} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Your username or GitHub profile URL" autoComplete="off" spellCheck={false} maxLength={200} disabled={fetching} /><button className="button primary" type="submit" disabled={fetching}>{fetching ? <LoaderCircle className="spin" size={17} /> : <ArrowRight size={18} />}<span>{fetching ? 'Loading profile…' : 'Explore my GitHub'}</span></button></div><p id="username-hint"><ShieldCheck size={15} />Public profile data. No sign-in required.</p></form>
+        <Show when="signed-out">
+          <div className="landing-form">
+            <div className="landing-input-row">
+              <SignInButton mode="modal"><button className="button primary"><Github size={18} />Sign in</button></SignInButton>
+              <SignUpButton mode="modal"><button className="button secondary">Create account</button></SignUpButton>
+            </div>
+            <p><ShieldCheck size={15} />Use your GitHub account to get started.</p>
+          </div>
+        </Show>
+        <Show when="signed-in">
+          <div className="landing-form">
+            <button className="button primary" onClick={onLoadProfile} disabled={fetching}>
+              {fetching ? <LoaderCircle className="spin" size={17} /> : <Github size={18} />}
+              {fetching ? 'Loading profile…' : 'Explore my GitHub'}
+            </button>
+            <p><ShieldCheck size={15} />Your review uses public data from your connected GitHub account.</p>
+          </div>
+        </Show>
         {fetching && <div className="fetch-status" role="status"><LoaderCircle className="spin" size={16} /><span>Fetching your GitHub profile…</span><button className="text-button" onClick={cancel}>Cancel</button></div>}
-        {error && <div className="error-banner" role="alert"><Info size={18} /><div><strong>We couldn’t load that profile</strong><p id="username-error">{error}</p></div></div>}
+        {error && <div className="error-banner" role="alert"><Info size={18} /><div><strong>We couldn’t load that profile</strong><p>{error}</p></div></div>}
         <div className="landing-example-link"><span>Preview the experience</span><button className="text-button" onClick={showExample}>View a sample portfolio review <ArrowRight size={15} /></button></div>
       </div><section className="landing-visual portfolio-review-panel" aria-labelledby="review-panel-title">
         <div className="review-panel-top"><span className="review-panel-mark"><Code2 size={19} /></span><span className="small-label">YOUR PORTFOLIO REVIEW</span></div>
@@ -127,7 +144,7 @@ function Landing({ username, setUsername, inputRef, onSubmit, fetching, error, s
         <div className="review-context-note"><Users size={18} /><p>Your experience adds context. Include contributions and work that your repositories don’t show.</p></div>
       </section></section>
       <section id="how-it-works" className="landing-steps"><div className="landing-section-heading"><span className="small-label">HOW IT WORKS</span><h2>From your GitHub profile to a focused development plan.</h2></div><div className="landing-step-grid">{[
-        { number: '01', icon: Github, title: 'Load your profile', text: 'Enter your username. See your actual GitHub details and repository list as they arrive.' },
+        { number: '01', icon: Github, title: 'Load your profile', text: 'Sign in with GitHub to load your public profile and repositories.' },
         { number: '02', icon: Layers3, title: 'Explore your work', text: 'Review your public projects, the technologies they use, and the available project documentation.' },
         { number: '03', icon: Sparkles, title: 'Get personalized recommendations', text: 'Add your goals and existing work, then generate AI insights with reasons and practical next steps.' },
       ].map(({ number, icon: Icon, title, text }) => <article className="landing-step" key={number}><div><span className="role-symbol blue"><Icon size={23} /></span><span className="step-number">{number}</span></div><h3>{title}</h3><p>{text}</p></article>)}</div></section>
@@ -163,16 +180,22 @@ function Overview({ workspace, onRepositories, onAnalyze, loading }: {
   </>;
 }
 
-function EmptyWorkspace({ view, focusInput, showExample }: { view: View; focusInput: () => void; showExample: () => void }) {
+function EmptyWorkspace({ view, loadProfile, showExample }: { view: View; loadProfile: () => void; showExample: () => void }) {
   const title = view === 'repositories' ? 'Your repositories belong here.' : view === 'insights' ? 'Your AI insights start with your profile.' : 'Start with your GitHub profile.';
-  return <section className="panel welcome-panel"><span className="welcome-icon"><FolderGit2 size={38} /></span><span className="eyebrow-tag">YOUR PORTFOLIO</span><h2>{title}</h2><p>Enter a GitHub username above and load the profile. Explore your public profile, repositories, and project evidence in one place.</p><div className="welcome-actions"><button className="button primary" onClick={focusInput}>Enter a username <ArrowRight size={16} /></button><button className="button secondary" onClick={showExample}>Explore the example</button></div><div className="welcome-features"><span><Github size={18} />Real profile details</span><span><FolderGit2 size={18} />Actual repositories</span><span><Sparkles size={18} />AI insights on request</span></div></section>;
+  return <section className="panel welcome-panel"><span className="welcome-icon"><FolderGit2 size={38} /></span><span className="eyebrow-tag">YOUR PORTFOLIO</span><h2>{title}</h2><p>Open your connected GitHub profile to explore your repositories and project evidence.</p><div className="welcome-actions"><button className="button primary" onClick={loadProfile}>Load my profile <ArrowRight size={16} /></button><button className="button secondary" onClick={showExample}>Explore the example</button></div><div className="welcome-features"><span><Github size={18} />Real profile details</span><span><FolderGit2 size={18} />Actual repositories</span><span><Sparkles size={18} />AI insights on request</span></div></section>;
 }
 
 export default function App() {
+  const { sessionId } = useAuth();
+  return <WorkspaceApp key={sessionId ?? 'signed-out'} />;
+}
+
+function WorkspaceApp() {
+  const { getToken, isSignedIn, userId } = useAuth();
+  const savedReportsKey = `gitlens.reports.${userId}`;
   const [view, setView] = useState<View>('landing');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [selectedReport, setSelectedReport] = useState<Workspace | null>(null);
-  const [username, setUsername] = useState('');
   const [context, setContext] = useState<AnalysisContext>(emptyContext);
   const [modal, setModal] = useState<'context' | 'help' | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -182,7 +205,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [exampleTab, setExampleTab] = useState<'overview' | 'repositories' | 'insights'>('overview');
   const [exampleQuery, setExampleQuery] = useState('');
-  const [saved, setSaved] = useState<Workspace[]>(readSavedReports);
+  const [saved, setSaved] = useState<Workspace[]>(() => userId ? readSavedReports(savedReportsKey) : []);
   const apiBase = defaultApiBase();
   const [fetching, setFetching] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -192,7 +215,6 @@ export default function App() {
   const [toast, setToast] = useState('');
   const profileController = useRef<AbortController | null>(null);
   const analysisController = useRef<AbortController | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => () => { profileController.current?.abort(); analysisController.current?.abort(); }, []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4000); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { if (!analyzing) return; const timer = setInterval(() => setElapsed((seconds) => seconds + 1), 1000); return () => clearInterval(timer); }, [analyzing]);
@@ -243,25 +265,25 @@ export default function App() {
     if (next !== 'repositories') setQuery('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function focusInput() { inputRef.current?.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  async function loadProfile(event: FormEvent) {
-    event.preventDefault();
-    let user: string;
-    try { user = normalizeUsername(username); }
-    catch (err) { setError((err as Error).message); focusInput(); return; }
+  async function loadProfile() {
+    if (!isSignedIn || fetching) return;
     profileController.current?.abort(); analysisController.current?.abort(); analysisController.current = null;
-    if (workspace?.username.toLowerCase() !== user.toLowerCase()) setContext(emptyContext);
     const current = new AbortController(); profileController.current = current;
     setWorkspace(null); setSelectedReport(null); setAnalyzing(false); setFetching(true); setError(''); navigate('landing');
     const timeout = setTimeout(() => current.abort('timeout'), 240000);
     try {
+      const identity = await fetchGitHubIdentity(apiBase, current.signal, getToken);
+      const username = identity.github_username;
+      if (current.signal.aborted) return;
+      if (workspace && workspace.username.toLowerCase() !== username.toLowerCase()) setContext(emptyContext);
+      const getWorkspaceToken = identity.refresh_session ? () => getToken({ skipCache: true }) : getToken;
+
       let profileShown = false;
-      await fetchWorkspace(apiBase, user, current.signal, (result) => {
+      await fetchWorkspace(apiBase, username, current.signal, (result) => {
         if (profileController.current !== current || current.signal.aborted) return;
         setWorkspace((previous) => ({ ...result, analysis: previous?.analysis || '', context: previous?.context || emptyContext }));
         if (!profileShown) { profileShown = true; setView('overview'); }
-      });
-      if (!current.signal.aborted) { setUsername(user); }
+      }, getWorkspaceToken);
     } catch (err) {
       if (profileController.current !== current) return;
       if (current.signal.aborted) {
@@ -270,7 +292,8 @@ export default function App() {
     } finally { clearTimeout(timeout); if (profileController.current === current) setFetching(false); }
   }
   async function runAnalysis() {
-    if (!workspace) { focusInput(); return; }
+    if (!isSignedIn) return;
+    if (!workspace) { navigate('landing'); return; }
     if (!workspace.evidenceId || !workspace.evidenceExpiresAt || workspace.evidenceExpiresAt <= Date.now()) {
       setError('Reload your profile to prepare the evidence before generating insights.');
       return;
@@ -284,7 +307,7 @@ export default function App() {
     try {
       const analysis = await generateAnalysis(apiBase, user, usedContext, current.signal, workspace.evidenceId, (progress) => {
         if (!current.signal.aborted && analysisController.current === current) setAnalysisProgress(progress);
-      });
+      }, getToken);
       if (current.signal.aborted || analysisController.current !== current) return;
       setWorkspace((previous) => previous?.username === user ? { ...previous, analysis, context: usedContext, createdAt: new Date().toISOString() } : previous);
       setToast('Your AI response is ready.');
@@ -302,7 +325,7 @@ export default function App() {
   function saveReport() {
     if (!activeReport?.analysis || activeReport.sample) return;
     const next = [activeReport, ...saved.filter((report) => report.username !== activeReport.username || report.createdAt !== activeReport.createdAt)].slice(0, 10);
-    try { localStorage.setItem('gitlens.reports', JSON.stringify(next)); setSaved(next); setToast('Report saved in this browser.'); }
+    try { localStorage.setItem(savedReportsKey, JSON.stringify(next)); setSaved(next); setToast('Report saved in this browser.'); }
     catch { setToast('Browser storage is full or unavailable. Download the report instead.'); }
   }
   function download() {
@@ -341,11 +364,11 @@ export default function App() {
         </>);
   if (view === 'example') return <div className="public-example-page">
     <a href="#example-main" className="skip-link">Skip to sample review</a>
-    <header className="landing-nav"><button className="brand" aria-label="GitLens home" onClick={() => navigate('landing')}><span className="brand-icon"><Code2 size={26} /></span><span>gitlens<span className="brand-period">.</span></span></button><nav aria-label="Example navigation">{canEnterWorkspace && <button className="button secondary" onClick={() => navigate('overview')}>Back to your portfolio</button>}<button className="button primary" onClick={() => navigate('landing')}>Review your GitHub profile <ArrowRight size={16} /></button></nav></header>
+    <header className="landing-nav"><button className="brand" aria-label="GitLens home" onClick={() => navigate('landing')}><span className="brand-icon"><Code2 size={26} /></span><span>gitlens<span className="brand-period">.</span></span></button><nav aria-label="Example navigation">{canEnterWorkspace && <button className="button secondary" onClick={() => navigate('overview')}>Back to your portfolio</button>}<button className="button primary" onClick={() => navigate('landing')}>Review your GitHub profile <ArrowRight size={16} /></button><Show when="signed-in"><UserButton /></Show></nav></header>
     <main id="example-main" className="public-example-main"><div className="example-page-intro"><span className="eyebrow">SAMPLE PORTFOLIO REVIEW</span><h1>See your projects from a new perspective.</h1><p>Explore a fictional developer’s projects, technical evidence, and personalized recommendations.</p></div>{exampleContent}<footer className="page-footer"><span><Code2 size={17} />GitLens<span className="footer-divider">/</span>Understand your portfolio. Plan your next step.</span><button onClick={() => navigate('landing')}>Review your portfolio <ArrowRight size={14} /></button></footer></main>
   </div>;
   if (view === 'landing' || !canEnterWorkspace) return <>
-    <Landing username={username} setUsername={setUsername} inputRef={inputRef} onSubmit={loadProfile}
+    <Landing onLoadProfile={loadProfile}
       fetching={fetching} error={error} showExample={() => navigate('example')}
       cancel={() => profileController.current?.abort()} />
   </>;
@@ -357,18 +380,18 @@ export default function App() {
       <div className="workspace-label">YOUR WORKSPACE</div>
       <nav aria-label="Main navigation">{navItems.map(({ view: itemView, asset, label }) => <button key={itemView} aria-label={label} className={`nav-item ${view === itemView ? 'active' : ''}`} onClick={() => navigate(itemView)} aria-current={view === itemView ? 'page' : undefined}><span className="figma-icon"><img src={`/assets/figma/${asset}.svg`} alt="" /></span>{label}{itemView === 'insights' && <span className="nav-ai">AI</span>}{view === itemView && <span className="nav-indicator" />}</button>)}<button aria-label="Saved reports" className={`nav-item ${view === 'saved' ? 'active' : ''}`} onClick={() => navigate('saved')} aria-current={view === 'saved' ? 'page' : undefined}><Bookmark size={19} />Saved reports{saved.length > 0 && <span className="nav-count">{saved.length}</span>}</button></nav>
       <div className="sidebar-support"><div className="workspace-label">RESOURCES</div><button className="nav-item" onClick={() => { setMobileOpen(false); setModal('help'); }}><span className="figma-icon"><img src="/assets/figma/help.svg" alt="" /></span>How it works<ArrowUpRight size={13} className="nav-end" /></button></div>
-      <div className="sidebar-bottom"><div className="sidebar-tip"><span className="tip-icon"><Sparkles size={18} /></span><strong>More context. Better advice.</strong><p>Tell the AI about work that your fetched files don’t show.</p><button onClick={() => { setMobileOpen(false); setModal('context'); }}>Add your context <ArrowRight size={14} /></button></div><div className="workspace-owner"><span className="owner-avatar"><Github size={19} /></span><div><strong>Personal workspace</strong><span>No sign-in required</span></div><span className="online-dot" /></div></div>
+      <div className="sidebar-bottom"><div className="sidebar-tip"><span className="tip-icon"><Sparkles size={18} /></span><strong>More context. Better advice.</strong><p>Tell the AI about work that your fetched files don’t show.</p><button onClick={() => { setMobileOpen(false); setModal('context'); }}>Add your context <ArrowRight size={14} /></button></div><div className="workspace-owner"><span className="owner-avatar"><Github size={19} /></span><div><strong>Personal workspace</strong><span>Signed in with GitHub</span></div><span className="online-dot" /></div></div>
     </aside>
-    <div className="main-shell" inert={isMobile && mobileOpen}><header className="topbar"><div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => { setToast(''); setMobileOpen(true); }}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={13} /><strong>{viewNames[view]}</strong></div><div className="topbar-right"><span className="private-note"><ShieldCheck size={14} />Grounded in your project work</span><button className="icon-button" aria-label="How GitLens works" onClick={() => { setMobileOpen(false); setModal('help'); }}><Info size={18} /></button><span className="top-avatar">GL</span></div></header>
+    <div className="main-shell" inert={isMobile && mobileOpen}><header className="topbar"><div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => { setToast(''); setMobileOpen(true); }}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={13} /><strong>{viewNames[view]}</strong></div><div className="topbar-right"><span className="private-note"><ShieldCheck size={14} />Grounded in your project work</span><button className="icon-button" aria-label="How GitLens works" onClick={() => { setMobileOpen(false); setModal('help'); }}><Info size={18} /></button><UserButton /></div></header>
       <main id="main">
         <div className="page-intro"><div><div className="eyebrow"><span />GITHUB PORTFOLIO ANALYSIS</div><h1>Your work, in perspective<span>.</span></h1><p>Load your GitHub profile. Explore your repositories. Generate insights when you’re ready.</p></div><span className="powered-by"><Sparkles size={14} />Insights powered by Gemini</span></div>
-        <div className="loaded-profile-switcher"><span><Github size={18} />{workspace ? <>Workspace for <strong>@{workspace.username}</strong></> : 'No profile selected'}</span><button className="button secondary" onClick={() => { setError(''); navigate('landing'); }}>{workspace ? 'Change profile' : 'Load a GitHub profile'}<ArrowRight size={15} /></button></div>
+        <div className="loaded-profile-switcher"><span><Github size={18} />{workspace ? <>Workspace for <strong>@{workspace.username}</strong></> : 'No profile selected'}</span><button className="button secondary" onClick={loadProfile} disabled={fetching || analyzing}>Reload profile<ArrowRight size={15} /></button></div>
         {error && <div className="error-banner" role="alert"><Info size={18} /><div><strong>That request couldn’t be completed</strong><p>{error}</p></div><button className="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><X size={17} /></button></div>}
         {fetching && <div className="fetch-status" role="status"><LoaderCircle className="spin" size={16} /><span>{workspace ? 'Profile loaded. Fetching repositories and technical evidence…' : 'Fetching this GitHub profile…'}</span><button className="text-button" onClick={() => profileController.current?.abort()}>Cancel</button></div>}
         <div className="section-toolbar"><div><h2 id="view-heading" tabIndex={-1}>{view === 'overview' ? 'Portfolio overview' : viewNames[view]}{view !== 'saved' && displayedUser && <span className="report-status"><span className="status-dot" />{selectedReport ? 'Saved response' : 'Profile loaded'}</span>}</h2><p>{view === 'saved' ? 'Your saved portfolio reviews, available in this browser.' : displayedUser ? <><a href={`https://github.com/${displayedUser.username}`} target="_blank" rel="noopener noreferrer">@{displayedUser.username}<ArrowUpRight size={12} /></a><span className="toolbar-dot">·</span>{view === 'insights' ? selectedReport ? 'Saved AI response' : 'Personalized recommendations' : 'Public GitHub profile and projects'}</> : 'Load a GitHub profile to explore your portfolio.'}</p></div>{view === 'insights' && reportReady && <div className="report-actions"><button className={`button secondary ${isSaved ? 'saved-button' : ''}`} onClick={saveReport}>{isSaved ? <Check size={15} /> : <Bookmark size={15} />}{isSaved ? 'Saved' : 'Save report'}</button><button className="button secondary download-button" onClick={download}><ArrowDownToLine size={15} /><span>Export report</span></button></div>}</div>
         {view !== 'saved' && workspace?.warnings.length ? <div className="warning-banner" role="status"><Info size={16} />{workspace.warnings.join(' ')} Other fetched data remains available.</div> : null}
 
-        {(view === 'overview' || view === 'repositories' || view === 'insights') && !displayedUser && !fetching && <EmptyWorkspace view={view} focusInput={focusInput} showExample={() => navigate('example')} />}
+        {(view === 'overview' || view === 'repositories' || view === 'insights') && !displayedUser && !fetching && <EmptyWorkspace view={view} loadProfile={loadProfile} showExample={() => navigate('example')} />}
         {view === 'overview' && workspace && <Overview workspace={workspace} loading={fetching} onRepositories={(repo) => { navigate('repositories'); setQuery(repo || ''); }} onAnalyze={() => navigate('insights')} />}
         {view === 'repositories' && workspace && <Panel title="Your GitHub repositories" subtitle="Explore up to 50 of your most recently updated public repositories, including forks, and their available technical evidence." action={<label className="search-input"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a repository…" aria-label="Search repositories" /></label>}>{workspace.repositoriesLoaded === false ? <div className="empty-state"><FolderGit2 size={30} /><h3>{fetching ? 'Loading repositories…' : 'Repository list unavailable'}</h3><p>{fetching ? 'Loading this profile’s public repositories.' : 'Refresh the profile to try again.'}</p></div> : <RepositoryTable workspace={workspace} query={query} />}</Panel>}
         {view === 'insights' && activeReport && <>
@@ -377,14 +400,14 @@ export default function App() {
           {analyzing && !selectedReport && <section className="panel ai-loading" role="status"><LoaderCircle className="spin" size={26} /><div><h2>{analysisProgress === 'submitting' ? 'Starting your portfolio review' : analysisProgress === 'queued' ? 'Your review is queued' : 'Generating your AI insights'}</h2><p>{analysisProgress === 'submitting' ? 'Submitting your prepared portfolio evidence.' : analysisProgress === 'queued' ? 'Your report will begin when processing is available.' : 'Your repository evidence is being analyzed and combined into one portfolio assessment.'} Your overview and repositories remain available. {elapsed}s elapsed.</p></div><button className="button secondary" onClick={() => analysisController.current?.abort()}>Stop waiting</button></section>}
           {activeReport.analysis ? <PortfolioReport key={`${activeReport.username}-${activeReport.createdAt}`} workspace={activeReport} /> : !analyzing && <section className="panel welcome-panel"><span className="welcome-icon"><Sparkles size={36} /></span><h2>No AI response yet.</h2><p>Add your goals and experience, then generate a personalized review of your portfolio.</p></section>}
         </>}
-        {view === 'saved' && <Panel title="Your saved AI responses" subtitle={`${saved.length} of 10 browser-local report slots used`}>{saved.length ? <div className="saved-list">{saved.map((report) => <div className="saved-row" key={`${report.username}-${report.createdAt}`}><div className="repo-icon"><FileText size={21} /></div><button className="saved-open" onClick={() => openSaved(report)}><strong>{report.profile?.name || report.username}</strong><span>@{report.username} · {new Date(report.createdAt).toLocaleDateString()}</span></button><button className="icon-button" aria-label={`Delete saved report for ${report.username}`} onClick={() => { const next = saved.filter((item) => item !== report); try { localStorage.setItem('gitlens.reports', JSON.stringify(next)); setSaved(next); setToast('Saved report removed.'); } catch { setToast('Could not update browser storage.'); } }}><Trash2 size={17} /></button><button className="icon-button" aria-label={`Open report for ${report.username}`} onClick={() => openSaved(report)}><ArrowRight size={17} /></button></div>)}</div> : <div className="empty-state"><Bookmark size={34} /><h3>No saved AI responses yet.</h3><p>Generate a real analysis and choose Save report to keep it in this browser.</p><button className="button primary" onClick={() => navigate('insights')}>Go to AI insights <ArrowRight size={16} /></button></div>}</Panel>}
+        {view === 'saved' && <Panel title="Your saved AI responses" subtitle={`${saved.length} of 10 browser-local report slots used`}>{saved.length ? <div className="saved-list">{saved.map((report) => <div className="saved-row" key={`${report.username}-${report.createdAt}`}><div className="repo-icon"><FileText size={21} /></div><button className="saved-open" onClick={() => openSaved(report)}><strong>{report.profile?.name || report.username}</strong><span>@{report.username} · {new Date(report.createdAt).toLocaleDateString()}</span></button><button className="icon-button" aria-label={`Delete saved report for ${report.username}`} onClick={() => { const next = saved.filter((item) => item !== report); try { localStorage.setItem(savedReportsKey, JSON.stringify(next)); setSaved(next); setToast('Saved report removed.'); } catch { setToast('Could not update browser storage.'); } }}><Trash2 size={17} /></button><button className="icon-button" aria-label={`Open report for ${report.username}`} onClick={() => openSaved(report)}><ArrowRight size={17} /></button></div>)}</div> : <div className="empty-state"><Bookmark size={34} /><h3>No saved AI responses yet.</h3><p>Generate a real analysis and choose Save report to keep it in this browser.</p><button className="button primary" onClick={() => navigate('insights')}>Go to AI insights <ArrowRight size={16} /></button></div>}</Panel>}
         <footer className="page-footer"><span><Code2 size={15} />GitLens<span className="footer-divider">/</span>Understand your portfolio. Plan your next step.</span><button onClick={() => { setMobileOpen(false); setModal('help'); }}>How the analysis works <ArrowUpRight size={12} /></button></footer>
       </main>
     </div>
     {toast && <div className="toast" role="status"><Check size={16} />{toast}<button onClick={() => setToast('')} aria-label="Dismiss notification"><X size={14} /></button></div>}
     {modal === 'context' && <Modal title="The rest of your story" subtitle="Help the analysis see beyond manifests and README files." onClose={() => setModal(null)}><ContextForm context={context} onClose={() => setModal(null)} onSave={(value) => { setContext(value); setModal(null); setToast('Context applied. Generate AI insights to include it.'); }} /></Modal>}
     {modal === 'help' && <Modal title="How GitLens works" subtitle="GitHub data and AI generation are separate steps." onClose={() => setModal(null)}><div className="help-content">{[
-      { icon: Github, title: 'Load a real profile', text: 'Enter a GitHub username to see public profile details, repositories, and available project information.' },
+      { icon: Github, title: 'Load your GitHub profile', text: 'Your connected GitHub account provides your public profile, repositories, and project information.' },
       { icon: FolderGit2, title: 'Explore actual repositories', text: 'Browse public repositories, review their branches, and explore technologies identified in the available project files.' },
       { icon: Sparkles, title: 'Generate AI insights explicitly', text: 'Share your target roles, goals, and relevant experience. Generate a portfolio review with supporting evidence and practical recommendations.' },
       { icon: FileText, title: 'Try the fictional example', text: 'Explore a fictional developer’s portfolio to preview the overview, repository list, and recommendations before reviewing your own work.' },

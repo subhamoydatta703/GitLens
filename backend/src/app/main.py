@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.jobs.queue import queue
 from app.jobs.worker import create_worker
 from app.routes.github import router as github_router
+from app.routes.auth.protected import router as auth_router
+
 
 
 @asynccontextmanager
@@ -34,3 +36,4 @@ app.add_middleware(
 )
 
 app.include_router(github_router)
+app.include_router(auth_router)
