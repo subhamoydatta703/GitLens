@@ -1,0 +1,19 @@
+
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+import uuid
+from sqlalchemy import DateTime, Text, ForeignKey, func
+from app.database.db_base import Base
+
+class Assessment(Base):
+    __tablename__ = "github_assessment"
+
+    report: Mapped[str]=mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("github_users.id"),
+        primary_key=True,
+    )
