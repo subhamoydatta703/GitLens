@@ -8,4 +8,5 @@ class GithubUser(Base):
     __tablename__ = "github_users"
 
     id: Mapped[uuid.UUID]=mapped_column(primary_key=True,default=uuid.uuid4)
-    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    clerk_user_id: Mapped[str] = mapped_column(unique=True)
+    username: Mapped[str] = mapped_column(String(100))
