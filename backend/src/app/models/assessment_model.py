@@ -9,6 +9,7 @@ from sqlalchemy import DateTime
 class Assessment(Base):
     __tablename__ = "github_assessment"
 
+    assessment_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     report: Mapped[str]=mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -16,7 +17,7 @@ class Assessment(Base):
     )
     clerk_user_id: Mapped[str] = mapped_column(
         ForeignKey("github_users.clerk_user_id"),
-        primary_key=True,
+        unique=True,
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
