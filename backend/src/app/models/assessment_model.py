@@ -13,7 +13,7 @@ class Assessment(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("github_users.id"),
+    clerk_user_id: Mapped[str] = mapped_column(
+        ForeignKey("github_users.clerk_user_id"),
         primary_key=True,
     )
