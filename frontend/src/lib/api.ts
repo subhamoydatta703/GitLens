@@ -1,4 +1,4 @@
-import type { AnalysisContext, Profile, Repository, TechFile, Workspace } from '../types';
+import type { AnalysisContext, GitHubIdentity, Profile, Repository, SavedAssessment, TechFile, Workspace } from '../types';
 import { normalizeUsername } from './analysis';
 
 export function defaultApiBase() {
@@ -51,14 +51,42 @@ async function request<T>(base: string, path: string, signal: AbortSignal, body?
   catch { throw new Error('We couldn’t read this information. Please try again shortly.'); }
 }
 
-export async function fetchGitHubIdentity(base: string, signal: AbortSignal, getToken: GetToken) {
-  const identity = await request<{ github_username: string; refresh_session: boolean }>(
+function parseAssessment(value: unknown): SavedAssessment | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.user_id !== 'string'
+    || typeof candidate.username !== 'string'
+    || typeof candidate.report !== 'string'
+    || !candidate.report.trim()
+    || typeof candidate.created_at !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    user_id: candidate.user_id,
+    username: candidate.username,
+    report: candidate.report,
+    created_at: candidate.created_at,
+  };
+}
+
+export async function fetchGitHubIdentity(base: string, signal: AbortSignal, getToken: GetToken): Promise<GitHubIdentity> {
+  const identity = await request<{
+    github_username: string;
+    refresh_session: boolean;
+    assessment?: unknown;
+  }>(
     base, '/me', signal, undefined, 'GET', getToken,
   );
   if (typeof identity?.github_username !== 'string' || !identity.github_username) {
     throw new Error('Sign in with your GitHub account to load your profile.');
   }
-  return identity;
+  return {
+    github_username: identity.github_username,
+    refresh_session: Boolean(identity.refresh_session),
+    assessment: parseAssessment(identity.assessment),
+  };
 }
 
 export async function fetchWorkspace(
@@ -70,7 +98,7 @@ export async function fetchWorkspace(
 ): Promise<Workspace> {
   const requestedUsername = normalizeUsername(username);
   const path = `/github/${encodeURIComponent(requestedUsername)}`;
-  const profile = await request<Profile>(base, path, signal);
+  const profile = await request<Profile>(base, path, signal, undefined, 'GET', getToken);
   if (!profile || typeof profile.login !== 'string'
     || profile.login.toLowerCase() !== requestedUsername.toLowerCase()
     || !(profile.name === null || typeof profile.name === 'string')

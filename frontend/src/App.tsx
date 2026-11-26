@@ -278,10 +278,18 @@ function WorkspaceApp() {
       if (workspace && workspace.username.toLowerCase() !== username.toLowerCase()) setContext(emptyContext);
       const getWorkspaceToken = identity.refresh_session ? () => getToken({ skipCache: true }) : getToken;
 
+      const cachedAnalysis = identity.assessment?.report || '';
+      const cachedCreatedAt = identity.assessment?.created_at;
+
       let profileShown = false;
       await fetchWorkspace(apiBase, username, current.signal, (result) => {
         if (profileController.current !== current || current.signal.aborted) return;
-        setWorkspace((previous) => ({ ...result, analysis: previous?.analysis || '', context: previous?.context || emptyContext }));
+        setWorkspace((previous) => ({
+          ...result,
+          analysis: previous?.analysis || cachedAnalysis,
+          createdAt: previous?.analysis ? previous.createdAt : (cachedCreatedAt || result.createdAt),
+          context: previous?.context || emptyContext,
+        }));
         if (!profileShown) { profileShown = true; setView('overview'); }
       }, getWorkspaceToken);
     } catch (err) {

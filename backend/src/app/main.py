@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config.db_config import engine
+from app.config.redis_config import close_redis
 from app.jobs.queue import queue
 from app.jobs.worker import create_worker
 from app.routes.github import router as github_router
@@ -19,7 +21,11 @@ async def lifespan(app: FastAPI):
         try:
             await worker.close()
         finally:
-            await queue.close()
+            try:
+                await queue.close()
+            finally:
+                await close_redis()
+                await engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
